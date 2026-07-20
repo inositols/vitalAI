@@ -1,17 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../domain/repositories/auth_repository.dart';
+
+class AuthException implements Exception {
+  final String message;
+  const AuthException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 /// Concrete implementation of [AuthRepository] combining Firebase Auth
 /// and a localized fallback for offline/development mode when Firebase is not configured.
 class AuthRepositoryImpl implements AuthRepository {
+  final FlutterSecureStorage _secureStorage;
   final _fallbackController = StreamController<AuthUser?>.broadcast();
   AuthUser? _fallbackUser;
   bool _isFirebaseInitialized = false;
 
-  AuthRepositoryImpl() {
+  AuthRepositoryImpl(this._secureStorage) {
     _determineFirebaseStatus();
   }
 
@@ -28,6 +39,43 @@ class AuthRepositoryImpl implements AuthRepository {
       // Start in anonymous/offline mode as fallback
       _fallbackUser = null;
       _fallbackController.add(_fallbackUser);
+    }
+  }
+
+  /// Initialize local stored session if in offline fallback mode.
+  Future<void> init() async {
+    if (!_isFirebaseInitialized) {
+      final storedUserJson = await _secureStorage.read(key: 'offline_auth_user');
+      if (storedUserJson != null) {
+        try {
+          final map = jsonDecode(storedUserJson) as Map<String, dynamic>;
+          _fallbackUser = AuthUser(
+            uid: map['uid'] as String,
+            email: map['email'] as String?,
+            displayName: map['displayName'] as String?,
+            isAnonymous: map['isAnonymous'] as bool? ?? false,
+          );
+          _fallbackController.add(_fallbackUser);
+        } catch (_) {
+          // Ignore corruption
+        }
+      }
+    }
+  }
+
+  Future<void> _persistFallbackUser(AuthUser? user) async {
+    _fallbackUser = user;
+    _fallbackController.add(user);
+    if (user != null) {
+      final map = {
+        'uid': user.uid,
+        'email': user.email,
+        'displayName': user.displayName,
+        'isAnonymous': user.isAnonymous,
+      };
+      await _secureStorage.write(key: 'offline_auth_user', value: jsonEncode(map));
+    } else {
+      await _secureStorage.delete(key: 'offline_auth_user');
     }
   }
 
@@ -56,25 +104,25 @@ class AuthRepositoryImpl implements AuthRepository {
         final credential = await fb.FirebaseAuth.instance
             .signInWithEmailAndPassword(email: email, password: password);
         final user = _mapFirebaseUser(credential.user);
-        if (user == null) throw Exception("Failed to map sign-in user credentials.");
+        if (user == null) throw const AuthException("Failed to map sign-in user credentials.");
         return user;
       } catch (e) {
-        throw Exception("Email Sign-In Failed: ${e.toString()}");
+        throw AuthException(_mapFirebaseAuthError(e, isSignUp: false));
       }
     } else {
       // Offline fallback: Accept any credentials for testing
       await Future.delayed(const Duration(milliseconds: 600));
       if (email.contains("@") && password.length >= 6) {
-        _fallbackUser = AuthUser(
+        final user = AuthUser(
           uid: "offline_user_${email.hashCode}",
           email: email,
           displayName: email.split('@')[0],
           isAnonymous: false,
         );
-        _fallbackController.add(_fallbackUser);
-        return _fallbackUser!;
+        await _persistFallbackUser(user);
+        return user;
       }
-      throw Exception("Invalid credentials. Password must be >= 6 characters.");
+      throw const AuthException("Invalid credentials. Password must be >= 6 characters.");
     }
   }
 
@@ -87,7 +135,7 @@ class AuthRepositoryImpl implements AuthRepository {
             await googleUser?.authentication;
 
         if (googleAuth == null) {
-          throw Exception("Google authentication canceled.");
+          throw const AuthException("Google authentication canceled.");
         }
 
         final credential = fb.GoogleAuthProvider.credential(
@@ -98,22 +146,22 @@ class AuthRepositoryImpl implements AuthRepository {
         final userCredential =
             await fb.FirebaseAuth.instance.signInWithCredential(credential);
         final user = _mapFirebaseUser(userCredential.user);
-        if (user == null) throw Exception("Failed to map Google user credentials.");
+        if (user == null) throw const AuthException("Failed to map Google user credentials.");
         return user;
       } catch (e) {
-        throw Exception("Google Sign-In Failed: ${e.toString()}");
+        throw AuthException("Google Sign-In Failed: ${_mapFirebaseAuthError(e, isSignUp: false)}");
       }
     } else {
       // Offline fallback
       await Future.delayed(const Duration(milliseconds: 600));
-      _fallbackUser = const AuthUser(
+      final user = const AuthUser(
         uid: "offline_google_user",
         email: "google.user@example.com",
         displayName: "Google Guest",
         isAnonymous: false,
       );
-      _fallbackController.add(_fallbackUser);
-      return _fallbackUser!;
+      await _persistFallbackUser(user);
+      return user;
     }
   }
 
@@ -123,22 +171,22 @@ class AuthRepositoryImpl implements AuthRepository {
       try {
         final credential = await fb.FirebaseAuth.instance.signInAnonymously();
         final user = _mapFirebaseUser(credential.user);
-        if (user == null) throw Exception("Failed to map anonymous user credentials.");
+        if (user == null) throw const AuthException("Failed to map anonymous user credentials.");
         return user;
       } catch (e) {
-        throw Exception("Anonymous Sign-In Failed: ${e.toString()}");
+        throw AuthException("Anonymous Sign-In Failed: ${_mapFirebaseAuthError(e, isSignUp: false)}");
       }
     } else {
       // Offline fallback
       await Future.delayed(const Duration(milliseconds: 300));
-      _fallbackUser = const AuthUser(
+      final user = const AuthUser(
         uid: "offline_anonymous_user",
         email: null,
         displayName: "Guest Patient",
         isAnonymous: true,
       );
-      _fallbackController.add(_fallbackUser);
-      return _fallbackUser!;
+      await _persistFallbackUser(user);
+      return user;
     }
   }
 
@@ -149,31 +197,67 @@ class AuthRepositoryImpl implements AuthRepository {
         final credential = await fb.FirebaseAuth.instance
             .createUserWithEmailAndPassword(email: email, password: password);
         final user = _mapFirebaseUser(credential.user);
-        if (user == null) throw Exception("Registration failed.");
+        if (user == null) throw const AuthException("Registration failed.");
         return user;
       } catch (e) {
-        throw Exception("Registration Failed: ${e.toString()}");
+        throw AuthException(_mapFirebaseAuthError(e, isSignUp: true));
       }
     } else {
       await Future.delayed(const Duration(milliseconds: 600));
-      _fallbackUser = AuthUser(
+      final user = AuthUser(
         uid: "offline_user_${email.hashCode}",
         email: email,
         displayName: email.split('@')[0],
         isAnonymous: false,
       );
-      _fallbackController.add(_fallbackUser);
-      return _fallbackUser!;
+      await _persistFallbackUser(user);
+      return user;
     }
+  }
+
+  String _mapFirebaseAuthError(dynamic e, {required bool isSignUp}) {
+    if (e is fb.FirebaseAuthException) {
+      switch (e.code) {
+        case 'invalid-email':
+          return 'The email address is badly formatted.';
+        case 'user-disabled':
+          return 'This user account has been disabled.';
+        case 'user-not-found':
+          return 'No user found with this email. Please sign up first.';
+        case 'wrong-password':
+          return 'Incorrect password. Please try again.';
+        case 'invalid-credential':
+          return 'Incorrect email or password. Please try again.';
+        case 'too-many-requests':
+          return 'Too many login attempts. Please try again later.';
+        case 'network-request-failed':
+          return 'Network error. Please check your internet connection.';
+        case 'email-already-in-use':
+          return 'This email is already registered. Please sign in instead.';
+        case 'weak-password':
+          return 'The password is too weak. Please use a stronger password (at least 6 characters).';
+        case 'operation-not-allowed':
+          return 'Email/password accounts are not enabled.';
+        default:
+          return e.message ?? 'An authentication error occurred. Please try again.';
+      }
+    }
+    // Clean up generic exceptions
+    final str = e.toString();
+    if (str.startsWith('Exception: ')) {
+      return str.substring(11);
+    }
+    return str;
   }
 
   @override
   Future<void> signOut() async {
+    await _secureStorage.delete(key: 'offline_auth_user');
     if (_isFirebaseInitialized) {
       await fb.FirebaseAuth.instance.signOut();
     } else {
       _fallbackUser = null;
-      _fallbackController.add(_fallbackUser);
+      _fallbackController.add(null);
     }
   }
 

@@ -70,7 +70,7 @@ void main() {
       )),
       expect: () => [
         AuthLoading(),
-        const AuthFailure('Exception: Invalid credentials'),
+        const AuthFailure('Invalid credentials'),
       ],
     );
 

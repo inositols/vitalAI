@@ -46,7 +46,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           event.email, event.password);
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      final message = e.toString().replaceFirst('Exception: ', '');
+      emit(AuthFailure(message));
     }
   }
 
@@ -58,7 +59,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           event.email, event.password);
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      final message = e.toString().replaceFirst('Exception: ', '');
+      emit(AuthFailure(message));
     }
   }
 
@@ -69,7 +71,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = await _authRepository.signInWithGoogle();
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      final message = e.toString().replaceFirst('Exception: ', '');
+      emit(AuthFailure(message));
     }
   }
 
@@ -80,7 +83,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = await _authRepository.signInAnonymously();
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      final message = e.toString().replaceFirst('Exception: ', '');
+      emit(AuthFailure(message));
     }
   }
 

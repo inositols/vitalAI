@@ -1,12 +1,12 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
+import 'package:vitalai/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_event.dart';
 import '../database/db_service.dart';
 import '../notifications/notification_service.dart';
 import '../services/ai_service.dart';
 import '../plugin/module_registry.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
-import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/patients/domain/repositories/patient_repository.dart';
 import '../../features/patients/data/repositories/patient_repository_impl.dart';
@@ -24,7 +24,7 @@ Future<void> setupLocator() async {
   locator.registerLazySingleton<FlutterSecureStorage>(() => secureStorage);
 
   // 2. Local Database Service
-  final dbService = DbService(locator());
+  final dbService = DbService(locator<FlutterSecureStorage>());
   locator.registerSingleton<DbService>(dbService);
 
   // 3. Notification Manager
@@ -33,7 +33,9 @@ Future<void> setupLocator() async {
   locator.registerSingleton<NotificationService>(notificationService);
 
   // 4. Settings Block (pre-loaded before other repositories)
-  final settingsBloc = SettingsBloc(secureStorage: locator());
+  final settingsBloc = SettingsBloc(
+    secureStorage: locator<FlutterSecureStorage>(),
+  );
   settingsBloc.add(SettingsLoadRequested());
   // Wait brief moment for initial loading
   await settingsBloc.stream
@@ -47,20 +49,28 @@ Future<void> setupLocator() async {
   locator.registerSingleton<SettingsBloc>(settingsBloc);
 
   // 5. AI Gemini Client
-  final apiKey = settingsBloc.state.apiKey;
-  final aiService = AiService(apiKey.isNotEmpty ? apiKey : null);
-  aiService.setConsent(settingsBloc.state.aiConsent);
+  const geminiApiKey = 'AQ.Ab8RN6LA8ZZoVJVfyguJa_MyO1far3K4BVgHVOXJ-4WThfFkrA';
+  final initialKey = settingsBloc.state.apiKey.isNotEmpty
+      ? settingsBloc.state.apiKey
+      : geminiApiKey;
+  final aiService = AiService(initialKey);
   locator.registerSingleton<AiService>(aiService);
 
   // 6. Authentication Core
-  locator.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl());
-  locator.registerFactory(() => AuthBloc(authRepository: locator()));
+  final authRepository = AuthRepositoryImpl(locator<FlutterSecureStorage>());
+  await authRepository.init();
+  locator.registerSingleton<AuthRepository>(authRepository);
+  locator.registerFactory(
+    () => AuthBloc(authRepository: locator<AuthRepository>()),
+  );
 
   // 7. Multi-Profile Patient Core
   locator.registerLazySingleton<PatientRepository>(
-    () => PatientRepositoryImpl(locator()),
+    () => PatientRepositoryImpl(locator<DbService>()),
   );
-  locator.registerFactory(() => PatientBloc(patientRepository: locator()));
+  locator.registerFactory(
+    () => PatientBloc(patientRepository: locator<PatientRepository>()),
+  );
 
   // 8. Register Dynamic Plugin-Based Modules Dependencies
   ModuleRegistry.instance.registerModuleDependencies(locator);

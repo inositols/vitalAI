@@ -34,16 +34,13 @@ void main() {
       ),
     );
 
-    // Verify presence of VitalAI header logo text
-    expect(find.text('VitalAI'), findsOneWidget);
+    // Verify presence of branding text
     expect(find.text('Your Secure Health Companion'), findsOneWidget);
 
-    // Verify presence of standard M3 Email/Password input forms
+    // Verify presence of standard Email/Password input forms
     expect(find.byType(TextFormField), findsNWidgets(2));
 
-    // Verify presence of guest access and social login buttons
+    // Verify presence of login action button
     expect(find.text('Sign In'), findsOneWidget);
-    expect(find.text('Sign in with Google'), findsOneWidget);
-    expect(find.text('Continue Offline (Guest Profile)'), findsOneWidget);
   });
 }

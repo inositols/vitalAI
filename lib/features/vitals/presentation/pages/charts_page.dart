@@ -92,8 +92,25 @@ class _ChartsPageState extends State<ChartsPage> {
                       const SizedBox(height: 24),
 
                       // Chart Card Panel
-                      Card(
-                        elevation: 2,
+                      // Chart Card Panel with animated tab switcher and premium glassmorphic border
+                      Container(
+                        decoration: BoxDecoration(
+                          color: theme.brightness == Brightness.light
+                              ? Colors.white
+                              : theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withOpacity(0.15),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
@@ -106,11 +123,32 @@ class _ChartsPageState extends State<ChartsPage> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              SizedBox(
-                                height: 260,
-                                child: records.isEmpty
-                                    ? const Center(child: Text('No data recorded in this range.'))
-                                    : LineChart(_buildChartData(records, theme)),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 350),
+                                transitionBuilder: (Widget child, Animation<double> animation) {
+                                  final slide = Tween<Offset>(
+                                    begin: const Offset(0.05, 0.0),
+                                    end: Offset.zero,
+                                  ).animate(CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ));
+
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: SlideTransition(
+                                      position: slide,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: SizedBox(
+                                  key: ValueKey<String>(_activeTab),
+                                  height: 260,
+                                  child: records.isEmpty
+                                      ? const Center(child: Text('No data recorded in this range.'))
+                                      : LineChart(_buildChartData(records, theme)),
+                                ),
                               ),
                             ],
                           ),
@@ -134,23 +172,44 @@ class _ChartsPageState extends State<ChartsPage> {
       {'id': 'bp', 'label': 'Blood Pressure', 'icon': Icons.favorite_outline},
       {'id': 'glucose', 'label': 'Glucose', 'icon': Icons.opacity},
       {'id': 'pulse', 'label': 'Pulse Rate', 'icon': Icons.heart_broken_outlined},
-      {'id': 'temp', 'label': 'Temperature', 'icon': Icons.thermostat},
+      {'id': 'temp', 'label': 'Temperature', 'icon': Icons.thermostat_outlined},
       {'id': 'weight', 'label': 'Weight', 'icon': Icons.scale_outlined},
     ];
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
       child: Row(
         children: chips.map((chip) {
           final isSelected = _activeTab == chip['id'];
           return Padding(
-            padding: const EdgeInsets.only(right: 8.0),
+            padding: const EdgeInsets.only(right: 10.0),
             child: ChoiceChip(
-              iconTheme: IconThemeData(
-                color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+              avatar: Icon(
+                chip['icon'] as IconData,
+                color: isSelected ? Colors.white : theme.colorScheme.primary,
+                size: 18,
               ),
-              label: Text(chip['label'] as String),
+              label: Text(
+                chip['label'] as String,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : theme.colorScheme.onSurface,
+                ),
+              ),
               selected: isSelected,
+              selectedColor: theme.colorScheme.primary,
+              backgroundColor: theme.brightness == Brightness.light
+                  ? Colors.grey.withOpacity(0.08)
+                  : theme.colorScheme.surfaceVariant.withOpacity(0.4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              showCheckmark: false,
               onSelected: (val) {
                 if (val) setState(() => _activeTab = chip['id'] as String);
               },
@@ -236,14 +295,56 @@ class _ChartsPageState extends State<ChartsPage> {
       );
     }
 
+    double yInterval;
+    switch (_activeTab) {
+      case 'bp':
+        yInterval = 20;
+        break;
+      case 'glucose':
+        yInterval = 30;
+        break;
+      case 'pulse':
+        yInterval = 20;
+        break;
+      case 'temp':
+        yInterval = 1;
+        break;
+      case 'weight':
+        yInterval = 20;
+        break;
+      default:
+        yInterval = 20;
+    }
+
     return LineChartData(
       lineBarsData: lineBars,
       gridData: const FlGridData(show: true, drawVerticalLine: false),
-      titlesData: const FlTitlesData(
-        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
-        bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      titlesData: FlTitlesData(
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 40,
+            interval: yInterval,
+            getTitlesWidget: (value, meta) {
+              String text;
+              if (_activeTab == 'temp') {
+                text = value.toStringAsFixed(1);
+              } else {
+                text = value.toInt().toString();
+              }
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                child: Text(
+                  text,
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
+                ),
+              );
+            },
+          ),
+        ),
+        bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       ),
       borderData: FlBorderData(
         show: true,

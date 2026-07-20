@@ -59,3 +59,12 @@ class VitalsRecordDeleted extends VitalsEvent {
   @override
   List<Object?> get props => [localId, remoteId, patientId];
 }
+
+class VitalsSyncRequested extends VitalsEvent {
+  final int patientId;
+
+  const VitalsSyncRequested(this.patientId);
+
+  @override
+  List<Object?> get props => [patientId];
+}

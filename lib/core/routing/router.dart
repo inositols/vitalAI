@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../plugin/module_registry.dart';
@@ -18,56 +19,136 @@ final GlobalKey<NavigatorState> shellNavigatorKey = GlobalKey<NavigatorState>();
 /// Configuration class for the app's GoRouter instance.
 /// Automatically mounts paths for core features and dynamically attaches module routes.
 class AppRouter {
-  static GoRouter buildRouter(BuildContext context) {
-    return GoRouter(
-      navigatorKey: rootNavigatorKey,
-      initialLocation: '/login',
-      routes: [
-        GoRoute(
-          path: '/login',
-          builder: (context, state) => const LoginPage(),
+  static final GoRouter router = GoRouter(
+    navigatorKey: rootNavigatorKey,
+    initialLocation: '/login',
+    routes: [
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) => _buildPageTransition(
+          state: state,
+          child: const LoginPage(),
+          slideUp: false,
         ),
-        GoRoute(
-          path: '/patients',
-          builder: (context, state) => const PatientsPage(),
+      ),
+      GoRoute(
+        path: '/patients',
+        pageBuilder: (context, state) => _buildPageTransition(
+          state: state,
+          child: const PatientsPage(),
+          slideUp: false,
         ),
-        GoRoute(
-          path: '/vitals/add',
-          builder: (context, state) => const AddVitalPage(),
+      ),
+      GoRoute(
+        path: '/vitals/add',
+        pageBuilder: (context, state) => _buildPageTransition(
+          state: state,
+          child: const AddVitalPage(),
+          slideUp: true,
         ),
-        ShellRoute(
-          navigatorKey: shellNavigatorKey,
-          builder: (context, state, child) => _ShellScaffold(child: child),
-          routes: [
-            GoRoute(
-              path: '/',
-              builder: (context, state) => const DashboardPage(),
+      ),
+      ShellRoute(
+        navigatorKey: shellNavigatorKey,
+        builder: (context, state, child) => _ShellScaffold(child: child),
+        routes: [
+          GoRoute(
+            path: '/',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const DashboardPage(),
+              slideUp: true,
             ),
-            GoRoute(
-              path: '/history',
-              builder: (context, state) => const HistoryPage(),
+          ),
+          GoRoute(
+            path: '/history',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const HistoryPage(),
+              slideUp: true,
             ),
-            GoRoute(
-              path: '/charts',
-              builder: (context, state) => const ChartsPage(),
+          ),
+          GoRoute(
+            path: '/charts',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const ChartsPage(),
+              slideUp: true,
             ),
-            GoRoute(
-              path: '/ai-chat',
-              builder: (context, state) => const AiChatPage(),
+          ),
+          GoRoute(
+            path: '/ai-chat',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const AiChatPage(),
+              slideUp: true,
             ),
-            GoRoute(
-              path: '/caregiver',
-              builder: (context, state) => const CaregiverPage(),
+          ),
+          GoRoute(
+            path: '/caregiver',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const CaregiverPage(),
+              slideUp: true,
             ),
-            GoRoute(
-              path: '/settings',
-              builder: (context, state) => const SettingsPage(),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (context, state) => _buildPageTransition(
+              state: state,
+              child: const SettingsPage(),
+              slideUp: true,
             ),
-            // Dynamically mount routes registered by other plugin modules
-            ...ModuleRegistry.instance.allRoutes,
-          ],
-        ),
-      ],
+          ),
+          // Dynamically mount routes registered by other plugin modules
+          ...ModuleRegistry.instance.allRoutes,
+        ],
+      ),
+    ],
+  );
+
+  static GoRouter buildRouter(BuildContext context) => router;
+
+  static Page<dynamic> _buildPageTransition({
+    required GoRouterState state,
+    required Widget child,
+    required bool slideUp,
+  }) {
+    return CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionDuration: const Duration(milliseconds: 350),
+      reverseTransitionDuration: const Duration(milliseconds: 250),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        if (slideUp) {
+          // Premium slide up & fade
+          final slideTween = Tween<Offset>(
+            begin: const Offset(0.0, 0.06),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOutCubic));
+
+          return SlideTransition(
+            position: animation.drive(slideTween),
+            child: FadeTransition(
+              opacity: CurveTween(curve: Curves.easeIn).animate(animation),
+              child: child,
+            ),
+          );
+        } else {
+          // Premium subtle scale-fade for main context switches
+          final scaleTween = Tween<double>(
+            begin: 0.96,
+            end: 1.0,
+          ).chain(CurveTween(curve: Curves.easeOutCubic));
+
+          return ScaleTransition(
+            scale: animation.drive(scaleTween),
+            child: FadeTransition(
+              opacity: CurveTween(curve: Curves.easeIn).animate(animation),
+              child: child,
+            ),
+          );
+        }
+      },
     );
   }
 }
@@ -85,28 +166,28 @@ class _ShellScaffold extends StatelessWidget {
     // Map navigation destinations
     final destinations = [
       const NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined, size: 28),
-        selectedIcon: Icon(Icons.dashboard, size: 28),
+        icon: Icon(CupertinoIcons.square_grid_2x2, size: 26),
+        selectedIcon: Icon(CupertinoIcons.square_grid_2x2_fill, size: 26),
         label: 'Dashboard',
       ),
       const NavigationDestination(
-        icon: Icon(Icons.history_outlined, size: 28),
-        selectedIcon: Icon(Icons.history, size: 28),
+        icon: Icon(CupertinoIcons.clock, size: 26),
+        selectedIcon: Icon(CupertinoIcons.clock_fill, size: 26),
         label: 'History',
       ),
       const NavigationDestination(
-        icon: Icon(Icons.bar_chart_outlined, size: 28),
-        selectedIcon: Icon(Icons.bar_chart, size: 28),
+        icon: Icon(CupertinoIcons.waveform_path_ecg, size: 26),
+        selectedIcon: Icon(CupertinoIcons.waveform_path_ecg, size: 26),
         label: 'Charts',
       ),
       const NavigationDestination(
-        icon: Icon(Icons.chat_bubble_outline, size: 28),
-        selectedIcon: Icon(Icons.chat_bubble, size: 28),
+        icon: Icon(CupertinoIcons.sparkles, size: 26),
+        selectedIcon: Icon(CupertinoIcons.sparkles, size: 26),
         label: 'AI Chat',
       ),
       const NavigationDestination(
-        icon: Icon(Icons.settings_outlined, size: 28),
-        selectedIcon: Icon(Icons.settings, size: 28),
+        icon: Icon(CupertinoIcons.gear_alt, size: 26),
+        selectedIcon: Icon(CupertinoIcons.gear_alt_fill, size: 26),
         label: 'Settings',
       ),
     ];
@@ -140,13 +221,23 @@ class _ShellScaffold extends StatelessWidget {
       }
     }
 
-    return Scaffold(
-      body: SafeArea(child: child),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: getSelectedIndex(),
-        onDestinationSelected: onItemTapped,
-        destinations: destinations,
-        height: 80, // Large height for senior-friendly visual target
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (currentLoc == '/') {
+          context.go('/patients');
+        } else {
+          context.go('/');
+        }
+      },
+      child: Scaffold(
+        body: child,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: getSelectedIndex(),
+          onDestinationSelected: onItemTapped,
+          destinations: destinations,
+        ),
       ),
     );
   }

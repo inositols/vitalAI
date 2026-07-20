@@ -13,6 +13,7 @@ class VitalsBloc extends Bloc<VitalsEvent, VitalsState> {
     on<VitalsFilteredRequested>(_onVitalsFilteredRequested);
     on<VitalsRecordSaved>(_onVitalsRecordSaved);
     on<VitalsRecordDeleted>(_onVitalsRecordDeleted);
+    on<VitalsSyncRequested>(_onVitalsSyncRequested);
   }
 
   Future<void> _onVitalsListRequested(
@@ -60,6 +61,18 @@ class VitalsBloc extends Bloc<VitalsEvent, VitalsState> {
     emit(VitalsLoading());
     try {
       await _vitalsRepository.deleteVitalRecord(event.localId, event.remoteId);
+      final records = await _vitalsRepository.getVitals(event.patientId);
+      emit(VitalsLoadSuccess(records));
+    } catch (e) {
+      emit(VitalsFailure(e.toString()));
+    }
+  }
+
+  Future<void> _onVitalsSyncRequested(
+      VitalsSyncRequested event, Emitter<VitalsState> emit) async {
+    emit(VitalsLoading());
+    try {
+      await _vitalsRepository.syncVitals();
       final records = await _vitalsRepository.getVitals(event.patientId);
       emit(VitalsLoadSuccess(records));
     } catch (e) {
