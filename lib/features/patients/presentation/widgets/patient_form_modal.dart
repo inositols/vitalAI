@@ -57,8 +57,10 @@ class _PatientFormModalState extends State<PatientFormModal> {
 
   void _submit() {
     if (_formKey.currentState?.validate() ?? false) {
-      final p = widget.patient ?? PatientModel()
-        ..remoteId = widget.patient?.remoteId ?? const Uuid().v4();
+      final p = widget.patient ?? PatientModel();
+      if (widget.patient == null) {
+        p.remoteId = const Uuid().v4();
+      }
 
       p.name = _nameController.text.trim();
       p.gender = _gender;
@@ -66,6 +68,8 @@ class _PatientFormModalState extends State<PatientFormModal> {
       p.height = double.tryParse(_heightController.text.trim()) ?? 170.0;
       p.weight = double.tryParse(_weightController.text.trim()) ?? 70.0;
       p.emergencyContact = _contactController.text.trim();
+      p.isSynced = false;
+      p.updatedAt = DateTime.now();
 
       widget.onSave(p);
       Navigator.pop(context);
