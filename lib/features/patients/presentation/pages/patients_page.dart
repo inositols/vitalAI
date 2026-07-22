@@ -156,10 +156,15 @@ class _PatientsPageState extends State<PatientsPage> {
               );
             }
 
-            return ListView.separated(
+            return GridView.builder(
               padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.9,
+              ),
               itemCount: filteredPatients.length,
-              separatorBuilder: (ctx, idx) => const SizedBox(height: 12),
               itemBuilder: (ctx, index) {
                 final patient = filteredPatients[index];
                 final isActive = state.activePatient?.id == patient.id;
