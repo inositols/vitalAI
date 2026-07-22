@@ -54,7 +54,7 @@ Future<void> setupLocator() async {
   locator.registerSingleton<SettingsBloc>(settingsBloc);
 
   // 5. AI Gemini Client
-  const geminiApiKey = 'AQ.Ab8RN6LA8ZZoVJVfyguJa_MyO1far3K4BVgHVOXJ-4WThfFkrA';
+  const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   final initialKey = settingsBloc.state.apiKey.isNotEmpty
       ? settingsBloc.state.apiKey
       : geminiApiKey;

@@ -48,7 +48,7 @@ class _ApiKeyDialogState extends State<ApiKeyDialog> {
           TextField(
             controller: _apiKeyController,
             decoration: const InputDecoration(
-              hintText: 'AIzaSy...',
+              hintText: 'Enter Gemini API key...',
               labelText: 'API Key',
             ),
           ),

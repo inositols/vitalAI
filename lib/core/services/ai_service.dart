@@ -16,11 +16,9 @@ class AiService {
   }
 
   void _initModel() {
-    final isPlaceholder = _apiKey == null ||
-        _apiKey!.isEmpty ||
-        _apiKey == 'AQ.Ab8RN6LA8ZZoVJVfyguJa_MyO1far3K4BVgHVOXJ-4WThfFkrA';
+    final hasValidKey = _apiKey != null && _apiKey!.trim().isNotEmpty;
 
-    if (!isPlaceholder) {
+    if (hasValidKey) {
       _model = GenerativeModel(
         model: 'gemini-2.5-flash',
         apiKey: _apiKey!,
