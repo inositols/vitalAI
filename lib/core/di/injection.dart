@@ -12,6 +12,11 @@ import '../../features/patients/domain/repositories/patient_repository.dart';
 import '../../features/patients/data/repositories/patient_repository_impl.dart';
 import '../../features/patients/presentation/bloc/patient_bloc.dart';
 import '../../features/settings/presentation/bloc/settings_bloc.dart';
+import '../../features/vitals/domain/repositories/vitals_repository.dart';
+import '../../features/ai_assistant/domain/repositories/ai_assistant_repository.dart';
+import '../../features/ai_assistant/data/repositories/ai_assistant_repository_impl.dart';
+import '../../features/ai_assistant/domain/services/health_context_service.dart';
+import '../../features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -75,6 +80,26 @@ Future<void> setupLocator() async {
   // 8. Register Dynamic Plugin-Based Modules Dependencies
   ModuleRegistry.instance.registerModuleDependencies(locator);
 
-  // 9. Initialize Database (After registering all module schemas)
+  // 9. AI Assistant Core
+  locator.registerLazySingleton<HealthContextService>(
+    () => HealthContextService(
+      patientRepository: locator<PatientRepository>(),
+      vitalsRepository: locator<VitalsRepository>(),
+    ),
+  );
+
+  locator.registerLazySingleton<AiAssistantRepository>(
+    () => AiAssistantRepositoryImpl(locator<DbService>()),
+  );
+
+  locator.registerFactory(
+    () => AiAssistantBloc(
+      repository: locator<AiAssistantRepository>(),
+      contextService: locator<HealthContextService>(),
+      aiService: locator<AiService>(),
+    ),
+  );
+
+  // 10. Initialize Database (After registering all module schemas)
   await dbService.init();
 }

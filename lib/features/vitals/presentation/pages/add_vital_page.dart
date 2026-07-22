@@ -201,11 +201,11 @@ class _AddVitalPageState extends State<AddVitalPage>
                   indicatorSize: TabBarIndicatorSize.tab,
                   indicator: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: theme.colorScheme.primary.withOpacity(0.08),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
                   ),
                   labelColor: theme.colorScheme.primary,
-                  unselectedLabelColor: theme.colorScheme.onSurface.withOpacity(
-                    0.6,
+                  unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.6,
                   ),
                   labelStyle: const TextStyle(fontWeight: FontWeight.bold),
                   unselectedLabelStyle: const TextStyle(
@@ -297,7 +297,7 @@ class _AddVitalPageState extends State<AddVitalPage>
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          value: _glucoseMealContext,
+                          initialValue: _glucoseMealContext,
                           decoration: const InputDecoration(
                             labelText: 'Meal Context',
                           ),
@@ -464,7 +464,7 @@ class _AddVitalPageState extends State<AddVitalPage>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.2),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),

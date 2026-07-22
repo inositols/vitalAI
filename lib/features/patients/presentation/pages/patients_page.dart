@@ -129,7 +129,7 @@ class _PatientsPageState extends State<PatientsPage> {
                       Icon(
                         Icons.people_outline,
                         size: 80,
-                        color: theme.colorScheme.primary.withOpacity(0.4),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -164,7 +164,7 @@ class _PatientsPageState extends State<PatientsPage> {
                       Icon(
                         Icons.search_off_outlined,
                         size: 80,
-                        color: theme.colorScheme.primary.withOpacity(0.4),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -237,29 +237,29 @@ class _PatientsPageState extends State<PatientsPage> {
                                   : BoxDecoration(
                                       color: isActive
                                           ? theme.colorScheme.primaryContainer
-                                                .withOpacity(0.35)
+                                                .withValues(alpha: 0.35)
                                           : theme.colorScheme.surface,
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
                                         color: isActive
                                             ? theme.colorScheme.primary
                                             : theme.colorScheme.outline
-                                                  .withOpacity(0.4),
+                                                  .withValues(alpha: 0.4),
                                         width: isActive ? 2.0 : 1.0,
                                       ),
                                       boxShadow: isActive
                                           ? [
                                               BoxShadow(
                                                 color: theme.colorScheme.primary
-                                                    .withOpacity(0.12),
+                                                    .withValues(alpha: 0.12),
                                                 blurRadius: 16,
                                                 offset: const Offset(0, 6),
                                               ),
                                             ]
                                           : [
                                               BoxShadow(
-                                                color: Colors.black.withOpacity(
-                                                  0.02,
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.02,
                                                 ),
                                                 blurRadius: 8,
                                                 offset: const Offset(0, 2),
@@ -363,7 +363,7 @@ class _PatientsPageState extends State<PatientsPage> {
                               : [
                                   BoxShadow(
                                     color: theme.colorScheme.primary
-                                        .withOpacity(0.2),
+                                        .withValues(alpha: 0.2),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
                                   ),
@@ -484,7 +484,7 @@ class _AddPatientFormState extends State<_AddPatientForm> {
               width: 36,
               height: 5,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2.5),
               ),
             ),
@@ -506,8 +506,8 @@ class _AddPatientFormState extends State<_AddPatientForm> {
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
                   style: IconButton.styleFrom(
-                    backgroundColor: theme.colorScheme.onSurface.withOpacity(
-                      0.06,
+                    backgroundColor: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.06,
                     ),
                     padding: const EdgeInsets.all(8),
                   ),
@@ -536,7 +536,7 @@ class _AddPatientFormState extends State<_AddPatientForm> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _gender,
+                      initialValue: _gender,
                       decoration: const InputDecoration(
                         labelText: 'Gender',
                         prefixIcon: Icon(Icons.wc),

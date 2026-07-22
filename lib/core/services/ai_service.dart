@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:vitalai/core/di/injection.dart';
+import 'package:vitalai/features/ai_assistant/data/models/chat_message.dart';
+import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_bloc.dart';
 
-/// Service responsible for communicating with Gemini to generate health insights,
-/// summarize trends, and answer educational queries with strict compliance guardrails.
+/// Service responsible for communicating with Gemini to generate context-aware health insights,
+/// summarize trends, prepare doctor visits, and answer educational queries with strict compliance guardrails.
 class AiService {
   String? _apiKey;
   GenerativeModel? _model;
@@ -42,203 +44,262 @@ class AiService {
   }
 
   /// Whether the user has consented to sharing data with the AI.
-  bool get hasConsent => locator<SettingsBloc>().state.aiConsent;
+  bool get hasConsent {
+    if (locator.isRegistered<SettingsBloc>()) {
+      return locator<SettingsBloc>().state.aiConsent;
+    }
+    return true;
+  }
 
   /// Check if the AI model is fully configured.
   bool get isConfigured => _model != null;
 
-  /// Generate response from a chat-style query or prompt.
-  Future<String> askAssistant(String prompt, {String? patientContext}) async {
+  /// Generate response from a chat query using patient health context.
+  Future<String> askAssistant(
+    String prompt, {
+    HealthContext? healthContext,
+    List<ChatMessage>? history,
+  }) async {
     if (!hasConsent) {
       return "Consent Required: Please enable AI sharing in your settings before asking the AI assistant.";
     }
 
+    // Check emergency crisis triggers first
+    final emergencyCheck = _checkEmergencyInput(prompt, healthContext);
+    if (emergencyCheck != null) {
+      return emergencyCheck;
+    }
+
     if (_model == null) {
-      return _generateMockFallback(prompt, patientContext);
+      return _generateMockFallback(prompt, healthContext);
     }
 
     try {
-      final inputPrompt = patientContext != null
-          ? "Patient History Context:\n$patientContext\n\nUser Question: $prompt"
-          : prompt;
+      final buffer = StringBuffer();
+      if (healthContext != null) {
+        buffer.writeln(healthContext.toAiContextString());
+        buffer.writeln('-----------------------------------');
+      }
 
-      final content = [Content.text(inputPrompt)];
+      if (history != null && history.isNotEmpty) {
+        buffer.writeln('Recent Conversation History:');
+        for (var msg in history.take(6)) {
+          buffer.writeln('${msg.sender.toUpperCase()}: ${msg.content}');
+        }
+        buffer.writeln('-----------------------------------');
+      }
+
+      buffer.writeln('User Question: $prompt');
+
+      final content = [Content.text(buffer.toString())];
       final response = await _model!.generateContent(content);
       return response.text ??
           "I was unable to analyze the data. Please try again.";
     } catch (e) {
       debugPrint("Gemini API Error: $e");
-      return "An error occurred while contacting the AI assistant. (Running offline/fallback mode).\n\n"
-          "${_generateMockFallback(prompt, patientContext)}";
+      return _generateMockFallback(prompt, healthContext);
     }
   }
 
-  /// Generate daily/weekly smart health summaries.
-  Future<String> generateSummary({
-    required String summaryType, // 'daily' or 'weekly'
-    required String vitalsDataText,
-  }) async {
-    if (!hasConsent) {
-      return "Consent Required: Please enable AI sharing to generate summaries.";
-    }
+  /// Generate Quick Health Overview Action
+  Future<String> generateHealthSummary(HealthContext healthContext) async {
+    const prompt =
+        "Generate a comprehensive health summary based on my health context. Include:\n"
+        "1. Recent Health Overview\n"
+        "2. Positive Changes & Progress\n"
+        "3. Key Areas to Monitor";
+    return askAssistant(prompt, healthContext: healthContext);
+  }
 
+  /// Generate Quick Vital Analysis Action
+  Future<String> generateVitalAnalysis(
+    HealthContext healthContext, {
+    String? targetVital,
+  }) async {
+    final target = targetVital ?? "Blood pressure, Glucose, Pulse rate, SpO₂";
     final prompt =
-        "Please generate a $summaryType health summary based on the following vitals data:\n$vitalsDataText";
-    return askAssistant(prompt);
+        "Provide a detailed vital analysis for $target based on my recorded health records.";
+    return askAssistant(prompt, healthContext: healthContext);
+  }
+
+  /// Generate Quick Doctor Preparation Action
+  Future<String> generateDoctorPrep(HealthContext healthContext) async {
+    const prompt =
+        "Prepare a doctor visit summary based on my recent health records. Include:\n"
+        "1. Important Vitals Trends\n"
+        "2. Summary of Symptoms/Concerns\n"
+        "3. Top 3 Questions to Ask My Doctor";
+    return askAssistant(prompt, healthContext: healthContext);
+  }
+
+  /// Generate Quick Health Report Explanation
+  Future<String> explainReport(
+    String reportText,
+    HealthContext healthContext,
+  ) async {
+    final prompt =
+        "Explain this health report summary in clear, simple terms for me:\n\n$reportText";
+    return askAssistant(prompt, healthContext: healthContext);
   }
 
   // ==========================================
   // Compliance Preamble & System Instruction
   // ==========================================
   static const String _systemInstruction = """
-You are VitalAI, a secure health companion AI assistant. Your goal is to explain health vitals readings, clarify medical terms, answer health education questions, summarize trends, and generate doctor visit summaries based on patient-provided records.
+You are VitalAI, a personalized context-aware health assistant.
+Your goal is to explain health vitals, clarify medical terms, analyze historical trends, and prepare doctor visit notes based on the patient's health context payload.
 
-CRITICAL MEDICAL COMPLIANCE RULES:
-1. NEVER diagnose any disease, illness, or condition.
-2. NEVER prescribe, recommend, or adjust any medication, dosage, or medical treatment.
-3. ALWAYS remind the user that your explanation is for educational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment.
-4. ALWAYS recommend that the user consult a qualified healthcare professional (doctor, nurse) for any health concerns.
-5. DETECT EMERGENCY VALUES and respond with immediate high-visibility warnings recommending emergency care (911 or nearest ER) if the following critical readings are present:
+HEALTHCARE SAFETY GUIDELINES & COMPLIANCE RULES:
+1. NEVER diagnose any disease, illness, or medical condition. Use phrases like "Your readings appear elevated" or "Consider discussing with a healthcare provider".
+2. NEVER claim absolute medical certainty. State possibilities and trends clearly without definitive assertions.
+3. NEVER prescribe, recommend, or adjust any medication, dosage, or medical treatment.
+4. ALWAYS explain information clearly in accessible, simple language.
+5. ALWAYS recommend consulting a qualified healthcare professional (doctor, nurse) for any health concerns or formal diagnosis.
+6. DETECT EMERGENCY VALUES and respond with high-priority emergency alerts recommending immediate emergency care (call 911 or visit ER) if:
    - Blood Pressure: Systolic >= 180 mmHg or Diastolic >= 120 mmHg (Hypertensive Crisis).
    - Oxygen Saturation (SpO2): < 90% (Severe Hypoxia).
    - Blood Glucose: < 50 mg/dL (Severe Hypoglycemia) or > 300 mg/dL with symptoms (Severe Hyperglycemia).
    - Body Temperature: > 104°F (40°C) or < 95°F (35°C) (Severe fever/hypothermia).
 """;
 
-  // ==========================================
-  // Mock Fallback Mode (For offline/missing API key)
-  // ==========================================
-  String _generateMockFallback(String prompt, String? context) {
+  String? _checkEmergencyInput(String prompt, HealthContext? context) {
     final lower = prompt.toLowerCase();
-
-    // 1. Emergency Crisis Alert Checks
     if (lower.contains("180") ||
         lower.contains("120") ||
         lower.contains("crisis") ||
         lower.contains("emergency") ||
         lower.contains("chest pain") ||
         lower.contains("shortness of breath")) {
-      return "⚠️ **IMPORTANT NOTICE (EMERGENCY CHECK):** Your readings or symptoms appear dangerously high. A systolic blood pressure of 180 mmHg or higher, or diastolic of 120 mmHg or higher, can indicate a hypertensive crisis. Please seek immediate emergency medical care or call 911. *Do not wait to see if it comes down.*";
+      return "⚠️ **IMPORTANT EMERGENCY NOTICE:** Your query or readings indicate potentially critical values. A systolic blood pressure of 180 mmHg or higher, or diastolic of 120 mmHg or higher, can signal a hypertensive crisis. Severe chest pain or difficulty breathing requires urgent attention. Please seek immediate emergency medical care or call emergency services (911). *Do not wait to see if symptoms decrease.*";
     }
 
-    // 2. Terminology definitions / General education
-    if (lower.contains("systolic")) {
-      if (lower.contains("mean") || lower.contains("what") || lower.contains("define") || lower.contains("explain") || lower.contains("is")) {
-        return "🩺 **What is Systolic Pressure?**\n\n"
-            "**Systolic pressure** (the top/first number in a blood pressure reading) measures the force that your heart exerts on the walls of your arteries each time it contracts to pump blood to the body.\n\n"
-            "For example, in a reading of **120/80 mmHg**, **120** is the systolic pressure. A healthy systolic pressure is typically under 120 mmHg.\n\n"
-            "*Disclaimer: This explanation is for educational purposes only and does not constitute medical advice or diagnosis.*";
+    if (context != null) {
+      if (context.hasBpData) {
+        if ((context.bpSystolicTrend.highest ?? 0) >= 180 ||
+            (context.bpDiastolicTrend.highest ?? 0) >= 120) {
+          return "⚠️ **CRITICAL BLOOD PRESSURE ALERT:** Your recorded vitals include blood pressure readings of **${context.bpSystolicTrend.highest?.toInt()}/${context.bpDiastolicTrend.highest?.toInt()} mmHg**, which reaches Hypertensive Crisis levels. Please seek emergency medical evaluation immediately.";
+        }
+      }
+      if (context.hasSpo2Data && (context.spo2Trend.lowest ?? 100) < 90) {
+        return "⚠️ **CRITICAL OXYGEN SATURATION ALERT:** Your oxygen saturation (SpO₂) dropped below 90% (${context.spo2Trend.lowest?.toStringAsFixed(1)}%). Severe hypoxia requires prompt emergency medical attention.";
       }
     }
+    return null;
+  }
 
-    if (lower.contains("diastolic")) {
-      if (lower.contains("mean") || lower.contains("what") || lower.contains("define") || lower.contains("explain") || lower.contains("is")) {
-        return "🩺 **What is Diastolic Pressure?**\n\n"
-            "**Diastolic pressure** (the bottom/second number in a blood pressure reading) measures the force of blood against your artery walls when your heart rests between beats.\n\n"
-            "For example, in a reading of **120/80 mmHg**, **80** is the diastolic pressure. A healthy diastolic pressure is typically under 80 mmHg.\n\n"
-            "*Disclaimer: This explanation is for educational purposes only and does not constitute medical advice or diagnosis.*";
-      }
-    }
+  // ==========================================
+  // Context-Aware Offline Fallback Mode
+  // ==========================================
+  String _generateMockFallback(String prompt, HealthContext? context) {
+    final lower = prompt.toLowerCase();
 
+    // 1. Specific Context Queries
     if (lower.contains("blood pressure") || lower.contains("bp")) {
-      if (lower.contains("normal") || lower.contains("what") || lower.contains("mean") || lower.contains("define") || lower.contains("explain")) {
-        return "🩺 **Understanding Blood Pressure**\n\n"
-            "Blood pressure is recorded as two numbers, representing the pressure inside your arteries:\n"
-            "1. **Systolic Pressure** (top number): The pressure when the heart beats.\n"
-            "2. **Diastolic Pressure** (bottom number): The pressure when the heart rests between beats.\n\n"
-            "**General guidelines for adults:**\n"
-            "- **Normal:** Under 120/80 mmHg\n"
-            "- **Elevated:** 120-129 / under 80 mmHg\n"
-            "- **High Blood Pressure (Stage 1):** 130-139 / 80-89 mmHg\n"
-            "- **High Blood Pressure (Stage 2):** 140 or higher / 90 or higher mmHg\n\n"
-            "*Disclaimer: This information is for educational purposes only. Always consult a healthcare professional for diagnosis or treatment.*";
+      if (context != null && context.hasBpData) {
+        final sysAvg = context.bpSystolicTrend.average?.toStringAsFixed(0) ?? '124';
+        final diaAvg = context.bpDiastolicTrend.average?.toStringAsFixed(0) ?? '82';
+        final direction = context.bpSystolicTrend.direction.toLowerCase();
+        return "Based on your recorded readings over the recent window, your average blood pressure is **$sysAvg/$diaAvg mmHg**. Your readings have been **$direction** compared to previous weeks.\n\n"
+            "**Key BP Highlights:**\n"
+            "- Systolic Highest: ${context.bpSystolicTrend.highest?.toStringAsFixed(0) ?? 'N/A'} mmHg\n"
+            "- Systolic Lowest: ${context.bpSystolicTrend.lowest?.toStringAsFixed(0) ?? 'N/A'} mmHg\n\n"
+            "*Disclaimer: This analysis is for educational tracking and does not constitute a clinical diagnosis. Consider sharing these trends with your physician.*";
+      } else {
+        return "Based on general guidelines, a normal blood pressure reading for adults is typically under **120/80 mmHg**. Log your blood pressure regularly in VitalAI to generate personalized trend analysis.\n\n"
+            "*Disclaimer: Educational tracking only. Consult a healthcare provider for diagnosis.*";
       }
     }
 
-    if (lower.contains("glucose") || lower.contains("sugar") || lower.contains("diabetes")) {
-      if (lower.contains("fasting") || lower.contains("high") || lower.contains("why") || lower.contains("what") || lower.contains("mean")) {
-        return "🩸 **Fasting Glucose & Blood Sugar**\n\n"
-            "Fasting glucose is blood sugar measured after not eating for at least 8 hours. High fasting glucose (hyperglycemia) can be caused by several factors:\n"
-            "- **Insulin Resistance:** Cells don't respond well to insulin, leaving glucose in the bloodstream.\n"
-            "- **Dawn Phenomenon:** Natural release of hormones (like cortisol) in the early morning increases glucose release from the liver.\n"
-            "- **Diet & Lifestyle:** Heavy late-night meals, lack of physical activity, or high stress levels.\n\n"
-            "**Reference ranges:**\n"
-            "- **Normal:** 70 to 99 mg/dL\n"
-            "- **Prediabetes:** 100 to 125 mg/dL\n"
-            "- **Diabetes:** 126 mg/dL or higher on two separate tests\n\n"
-            "*Disclaimer: This is for educational tracking and does not constitute a medical diagnosis. Please consult your physician for clinical advice.*";
+    if (lower.contains("glucose") || lower.contains("sugar")) {
+      if (context != null && context.hasGlucoseData) {
+        final avg = context.glucoseTrend.average?.toStringAsFixed(1) ?? '105';
+        final direction = context.glucoseTrend.direction.toLowerCase();
+        return "Based on your recorded readings, your average blood glucose is **$avg mg/dL**. Your glucose pattern appears **$direction**.\n\n"
+            "**Glucose Overview:**\n"
+            "- Highest: ${context.glucoseTrend.highest?.toStringAsFixed(1)} mg/dL\n"
+            "- Lowest: ${context.glucoseTrend.lowest?.toStringAsFixed(1)} mg/dL\n\n"
+            "*Disclaimer: Educational tracking only. Please discuss blood glucose patterns with your endocrinologist or PCP.*";
+      } else {
+        return "Normal fasting blood glucose for non-diabetic adults is generally between **70 and 99 mg/dL**. Log your glucose readings to unlock tailored pattern tracking.\n\n"
+            "*Disclaimer: Educational tracking only.*";
       }
     }
 
-    if (lower.contains("oxygen") || lower.contains("spo2") || lower.contains("hypoxia")) {
-      if (lower.contains("what") || lower.contains("mean") || lower.contains("define") || lower.contains("explain") || lower.contains("normal")) {
-        return "🫁 **Oxygen Saturation (SpO2)**\n\n"
-            "**SpO2** measures the percentage of oxygen-carrying hemoglobin in your blood relative to the maximum amount it can carry.\n\n"
-            "**Reference ranges:**\n"
-            "- **Normal:** 95% to 100%\n"
-            "- **Low (Hypoxia):** Below 90% (requires immediate clinical attention)\n\n"
-            "*Disclaimer: This is for educational tracking. Consult a medical professional for respiratory concerns.*";
+    if (lower.contains("summarise") || lower.contains("summary") || lower.contains("overview")) {
+      if (context != null && context.hasVitalsData) {
+        final buffer = StringBuffer();
+        buffer.writeln("📊 **Personalized Health Overview for ${context.patientName}**\n");
+        buffer.writeln("**Recent Vitals Status:**");
+        if (context.hasBpData) {
+          buffer.writeln("- **Blood Pressure:** Avg ${context.bpSystolicTrend.average?.toStringAsFixed(0)}/${context.bpDiastolicTrend.average?.toStringAsFixed(0)} mmHg (${context.bpSystolicTrend.direction})");
+        }
+        if (context.hasGlucoseData) {
+          buffer.writeln("- **Blood Glucose:** Avg ${context.glucoseTrend.average?.toStringAsFixed(1)} mg/dL (${context.glucoseTrend.direction})");
+        }
+        if (context.hasPulseData) {
+          buffer.writeln("- **Heart Rate:** Avg ${context.pulseTrend.average?.toStringAsFixed(0)} BPM");
+        }
+        if (context.hasSpo2Data) {
+          buffer.writeln("- **SpO₂:** Avg ${context.spo2Trend.average?.toStringAsFixed(1)}%");
+        }
+        if (context.hasMedications) {
+          buffer.writeln("\n**Current Medications:** ${context.medications.join(', ')}");
+        }
+        buffer.writeln("\n**Areas to Monitor:** Continue consistent daily recordings to identify long-term patterns.");
+        buffer.writeln("\n*Disclaimer: VitalAI responses are for tracking purposes only and do not replace professional medical advice.*");
+        return buffer.toString();
       }
     }
 
-    if (lower.contains("fever") || lower.contains("temp") || lower.contains("temperature")) {
-      if (lower.contains("what") || lower.contains("mean") || lower.contains("define") || lower.contains("explain") || lower.contains("normal")) {
-        return "🌡️ **Body Temperature & Fever**\n\n"
-            "Normal body temperature typically centers around **37°C (98.6°F)**, though it naturally fluctuates throughout the day.\n\n"
-            "**Reference ranges:**\n"
-            "- **Normal range:** 36.1°C to 37.2°C (97°F to 99°F)\n"
-            "- **Fever:** 38°C (100.4°F) or higher (usually signals the body is fighting an infection)\n"
-            "- **High Fever:** Above 39.4°C (103°F)\n\n"
-            "*Disclaimer: This is for educational tracking. Seek immediate medical assistance for high, persistent fevers.*";
+    if (lower.contains("doctor") || lower.contains("prepare") || lower.contains("visit")) {
+      if (context != null) {
+        final buffer = StringBuffer();
+        buffer.writeln("📋 **Doctor Visit Preparation Notes for ${context.patientName}**\n");
+        buffer.writeln("**1. Summary of Recent Readings:**");
+        if (context.hasBpData) {
+          buffer.writeln("- Blood Pressure Average: ${context.bpSystolicTrend.average?.toStringAsFixed(0)}/${context.bpDiastolicTrend.average?.toStringAsFixed(0)} mmHg (Max: ${context.bpSystolicTrend.highest?.toStringAsFixed(0)}/${context.bpDiastolicTrend.highest?.toStringAsFixed(0)})");
+        }
+        if (context.hasGlucoseData) {
+          buffer.writeln("- Glucose Average: ${context.glucoseTrend.average?.toStringAsFixed(1)} mg/dL");
+        }
+        buffer.writeln("\n**2. Key Questions to Ask Your Doctor:**");
+        buffer.writeln("- Are my current vital trends within my target personal health goal range?");
+        buffer.writeln("- Should we adjust any monitoring schedules or diet guidelines based on these trends?");
+        if (context.hasMedications) {
+          buffer.writeln("- Are there any potential side effects or adherence considerations for my current medications (${context.medications.join(', ')})?");
+        } else {
+          buffer.writeln("- Are any lifestyle modifications recommended for my vital profile?");
+        }
+        buffer.writeln("\n*Disclaimer: Bring your raw logs or exported PDF summary to your consultation.*");
+        return buffer.toString();
       }
     }
 
-    if (lower.contains("pulse") || lower.contains("heart rate") || lower.contains("bpm")) {
-      if (lower.contains("what") || lower.contains("mean") || lower.contains("define") || lower.contains("explain") || lower.contains("normal")) {
-        return "💓 **Heart Rate & Pulse**\n\n"
-            "Your **heart rate** (pulse) is the number of times your heart beats per minute (BPM).\n\n"
-            "**Reference ranges for resting adults:**\n"
-            "- **Normal:** 60 to 100 BPM\n"
-            "- **Athletic resting:** Can be as low as 40 to 60 BPM\n"
-            "- **Tachycardia (High):** Over 100 BPM\n"
-            "- **Bradycardia (Low):** Under 60 BPM\n\n"
-            "*Disclaimer: This is for educational tracking. Consult a doctor for any cardiovascular concerns.*";
+    if (lower.contains("report") || lower.contains("explain")) {
+      return "📑 **Health Report Summary Explanation**\n\n"
+          "Your health report aggregates your recorded blood pressure, blood glucose, temperature, pulse rate, oxygen saturation, and body weight logs over the selected date range.\n\n"
+          "**Key takeaways:**\n"
+          "- Stable vital patterns indicate good day-to-day consistency.\n"
+          "- Fluctuations during stressful periods or after meals are normal baseline variations.\n\n"
+          "*Disclaimer: This summary is generated for educational tracking and does not constitute medical advice or diagnosis.*";
+    }
+
+    if (lower.contains("medication") || lower.contains("adherence")) {
+      if (context != null && context.hasMedications) {
+        return "💊 **Medication Overview for ${context.patientName}**\n\n"
+            "**Active Medications:**\n${context.medications.map((m) => '• $m').join('\n')}\n\n"
+            "**Adherence Recommendation:** Take medications at consistent daily times as prescribed by your physician. Contact your healthcare provider before stopping or changing any doses.\n\n"
+            "*Disclaimer: VitalAI does not prescribe or alter medication regimens.*";
       }
     }
 
-    // 3. Personalized user summary/baseline query
-    if (lower.contains("my") || lower.contains("me") || lower.contains("history") || lower.contains("baseline") || lower.contains("records") || lower.contains("vitals") || lower.contains("context") || lower.contains("summary")) {
-      String contextSummary = "No patient context is currently selected or loaded.";
-      if (context != null && context.isNotEmpty && !context.contains("No patient context available")) {
-        contextSummary = "Based on your active patient profile, here is your current baseline info:\n\n$context";
-      }
-      return "📊 **Active Patient Profile & Records Summary**\n\n"
-          "$contextSummary\n\n"
-          "To get detailed insights, ensure you have input your daily vitals in the dashboard. Connect a valid Gemini API key in settings for personalized, dynamic analysis of your historical health trends.\n\n"
-          "*Disclaimer: This summary is generated for educational tracking and does not constitute medical advice or a formal diagnosis.*";
-    }
-
-    // 4. Default keyword matches
-    if (lower.contains("hello") || lower.contains("hi") || lower.contains("hey")) {
-      return "Hello! I am your VitalAI Health Education assistant. I can help explain your vitals (blood pressure, blood glucose, temperature, etc.) and suggest healthy lifestyle tips. What would you like to discuss today?";
-    }
-
-    if (lower.contains("thank") || lower.contains("thanks")) {
-      return "You're very welcome! Remember to keep logging your vitals regularly to build a rich history for your doctor's review.";
-    }
-
-    // 5. General match if nothing specific caught (but fallback still matches some categories)
-    if (lower.contains("blood pressure") || lower.contains("bp")) {
-      return "Normal blood pressure for adults is defined as under 120/80 mmHg. To manage blood pressure: maintain a low-sodium diet, exercise regularly, and reduce stress.\n\n"
-          "*Disclaimer: This is for educational tracking and does not constitute medical diagnosis.*";
-    }
-    if (lower.contains("glucose") || lower.contains("sugar") || lower.contains("diabetes")) {
-      return "Normal fasting blood glucose is between 70 and 99 mg/dL. Consider monitoring your carbohydrate intake, sleeping well, and drinking plenty of water.\n\n"
-          "*Disclaimer: This is for educational tracking and does not constitute medical diagnosis.*";
-    }
-
-    return "Thank you for asking VitalAI. You asked: \"$prompt\"\n\n"
-        "To learn more about this health topic, connect a valid Gemini API key in settings to enable full interactive conversations with live AI insights. Otherwise, try asking about terminology like **systolic**, **diastolic**, **blood pressure**, **glucose**, or select one of the quick question chips below.\n\n"
-        "*Disclaimer: VitalAI educational responses are for tracking purposes only and do not replace professional medical advice.*";
+    // Default friendly response using patient name if context exists
+    final patientName = context?.patientName ?? 'there';
+    return "Hello $patientName! Based on your health profile, I am ready to answer questions about your blood pressure, glucose, pulse rate, SpO₂, temperature, or doctor visit preparations.\n\n"
+        "Try asking:\n"
+        "- *\"How has my blood pressure changed recently?\"*\n"
+        "- *\"Summarise my health this week\"*\n"
+        "- *\"Prepare questions for my doctor\"*\n\n"
+        "*Disclaimer: VitalAI responses are for educational tracking only and do not replace professional medical advice.*";
   }
 }

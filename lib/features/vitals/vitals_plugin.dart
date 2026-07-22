@@ -10,7 +10,6 @@ import 'data/repositories/vitals_repository_impl.dart';
 import 'presentation/bloc/vitals_bloc.dart';
 import 'presentation/bloc/vitals_state.dart';
 import '../settings/presentation/bloc/settings_bloc.dart';
-import '../settings/presentation/bloc/settings_state.dart';
 
 /// Pluggable health vitals module registration wrapper.
 class VitalsPlugin implements VitalModule {
@@ -94,7 +93,7 @@ class _VitalsMetricCard extends StatelessWidget {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.15)),
+              side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
             ),
             child: const Padding(
               padding: EdgeInsets.all(24.0),
@@ -190,16 +189,16 @@ class _VitalsMetricCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.15)),
+        side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.06),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.06),
               radius: 24,
-              child: Icon(icon, color: theme.colorScheme.primary.withOpacity(0.6), size: 24),
+              child: Icon(icon, color: theme.colorScheme.primary.withValues(alpha: 0.6), size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -208,7 +207,7 @@ class _VitalsMetricCard extends StatelessWidget {
                 children: [
                   Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7))),
+                  Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
                 ],
               ),
             ),
@@ -236,7 +235,7 @@ class _VitalsMetricCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.15)),
+        side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
       ),
       child: InkWell(
         onTap: () => context.go('/charts'),
@@ -254,7 +253,7 @@ class _VitalsMetricCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: iconColor.withOpacity(0.08),
+                          color: iconColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(icon, color: iconColor, size: 20),
@@ -271,7 +270,7 @@ class _VitalsMetricCard extends StatelessWidget {
                   Text(
                     timeString,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -292,14 +291,14 @@ class _VitalsMetricCard extends StatelessWidget {
                               value,
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w900,
-                                color: theme.colorScheme.onBackground,
+                                color: theme.colorScheme.onSurface,
                               ),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               unit,
                               style: theme.textTheme.titleSmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
+                                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -309,9 +308,9 @@ class _VitalsMetricCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.08),
+                            color: statusColor.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: statusColor.withOpacity(0.15)),
+                            border: Border.all(color: statusColor.withValues(alpha: 0.15)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -426,7 +425,7 @@ class _SparklinePainter extends CustomPainter {
 
     final fillPaint = Paint()
       ..shader = LinearGradient(
-        colors: [lineColor.withOpacity(0.24), lineColor.withOpacity(0.0)],
+        colors: [lineColor.withValues(alpha: 0.24), lineColor.withValues(alpha: 0.0)],
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))

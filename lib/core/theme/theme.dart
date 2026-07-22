@@ -83,7 +83,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
         scrolledUnderElevation: 0,
-        shadowColor: Colors.black.withOpacity(0.05),
+        shadowColor: Colors.black.withValues(alpha: 0.05),
         shape: const Border(
           bottom: BorderSide(
             color: Color(0xFFE5E7EB), // Gray 200 divider
@@ -112,8 +112,8 @@ class AppTheme {
         indicatorColor: Colors.transparent, // Remove bulky pill
         elevation: 0,
         height: 72,
-        labelTextStyle: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
@@ -128,8 +128,8 @@ class AppTheme {
             fontFamily: 'Georgia',
           );
         }),
-        iconTheme: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: primaryLight, size: 26);
           }
           return const IconThemeData(color: Color(0xFF6B7280), size: 26);
@@ -181,7 +181,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
         scrolledUnderElevation: 0,
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: const Border(
           bottom: BorderSide(
             color: Color(0xFF2D3748), // Dark slate divider
@@ -210,8 +210,8 @@ class AppTheme {
         indicatorColor: Colors.transparent, // Remove bulky pill
         elevation: 0,
         height: 72,
-        labelTextStyle: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
@@ -226,8 +226,8 @@ class AppTheme {
             fontFamily: 'Georgia',
           );
         }),
-        iconTheme: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: primaryDark, size: 26);
           }
           return const IconThemeData(color: Color(0xFF9CA3AF), size: 26);
@@ -263,7 +263,6 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: primaryHcLight,
         secondary: Colors.black,
-        background: backgroundHcLight,
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: backgroundHcLight,
@@ -304,7 +303,6 @@ class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: primaryHcDark,
         secondary: Colors.white,
-        background: backgroundHcDark,
         surface: Color(0xFF121212),
       ),
       scaffoldBackgroundColor: backgroundHcDark,

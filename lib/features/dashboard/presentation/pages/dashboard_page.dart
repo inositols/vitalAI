@@ -191,7 +191,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 Text(
                                   '"Your average resting heart rate has improved by 6% over the last week. Elevated blood pressure checks indicate resting after high readings is helping."',
                                   style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: Colors.white.withValues(alpha: 0.9),
                                     fontStyle: FontStyle.italic,
                                   ),
                                 ),
@@ -261,8 +261,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     // Default helper card if no modules loaded
                     if (ModuleRegistry.instance.modules.isEmpty)
                       Card(
-                        color: theme.colorScheme.surfaceVariant.withOpacity(
-                          0.4,
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.4,
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(24.0),
@@ -376,9 +376,9 @@ class _QuickAddBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -389,7 +389,7 @@ class _QuickAddBtn extends StatelessWidget {
               label,
               style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onBackground,
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ],
@@ -449,7 +449,7 @@ class _ShimmeringInsightsCardState extends State<ShimmeringInsightsCard>
             ),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.24),
+                color: theme.colorScheme.primary.withValues(alpha: 0.24),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -465,9 +465,9 @@ class _ShimmeringInsightsCardState extends State<ShimmeringInsightsCard>
                       gradient: LinearGradient(
                         colors: [
                           Colors.transparent,
-                          Colors.white.withOpacity(0.0),
-                          Colors.white.withOpacity(0.18),
-                          Colors.white.withOpacity(0.0),
+                          Colors.white.withValues(alpha: 0.0),
+                          Colors.white.withValues(alpha: 0.18),
+                          Colors.white.withValues(alpha: 0.0),
                           Colors.transparent,
                         ],
                         begin: start,

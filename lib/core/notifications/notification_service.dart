@@ -185,7 +185,7 @@ class NotificationService {
         channelDescription: 'Scheduled daily measurements and activities',
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
-        largeIcon: const DrawableResourceAndroidBitmap('app_icon'),
+        largeIcon: DrawableResourceAndroidBitmap('app_icon'),
       ),
       iOS: DarwinNotificationDetails(),
     );
@@ -356,12 +356,12 @@ class _InAppNotificationBannerState extends State<_InAppNotificationBanner> {
                   : theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: theme.colorScheme.primary.withOpacity(0.2),
+                color: theme.colorScheme.primary.withValues(alpha: 0.2),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
+                  color: Colors.black.withValues(alpha: 0.12),
                   blurRadius: 24,
                   offset: const Offset(0, 8),
                 ),
@@ -406,7 +406,7 @@ class _InAppNotificationBannerState extends State<_InAppNotificationBanner> {
                       Text(
                         widget.body,
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           fontSize: 13,
                         ),
                       ),

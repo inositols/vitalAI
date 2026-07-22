@@ -206,7 +206,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                   boxShadow: [
                                     BoxShadow(
                                       color: theme.colorScheme.primary
-                                          .withOpacity(0.15),
+                                          .withValues(alpha: 0.15),
                                       blurRadius: 20,
                                       spreadRadius: 2,
                                     ),
@@ -228,8 +228,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             child: Text(
                               'Your Secure Health Companion',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onBackground
-                                    .withOpacity(0.6),
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.6),
                                 fontWeight: FontWeight.w500,
                               ),
                               textAlign: TextAlign.center,
@@ -246,27 +246,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                       color: theme.colorScheme.surface,
                                       borderRadius: BorderRadius.circular(24),
                                       border: Border.all(
-                                        color: theme.colorScheme.onBackground,
+                                        color: theme.colorScheme.onSurface,
                                         width: 2.0,
                                       ),
                                     )
                                   : BoxDecoration(
                                       color:
                                           theme.brightness == Brightness.light
-                                          ? Colors.white.withOpacity(0.75)
+                                          ? Colors.white.withValues(alpha: 0.75)
                                           : theme.colorScheme.surface
-                                                .withOpacity(0.65),
+                                                .withValues(alpha: 0.65),
                                       borderRadius: BorderRadius.circular(24),
                                       border: Border.all(
                                         color:
                                             theme.brightness == Brightness.light
-                                            ? Colors.white.withOpacity(0.6)
-                                            : Colors.white.withOpacity(0.08),
+                                            ? Colors.white.withValues(alpha: 0.6)
+                                            : Colors.white.withValues(alpha: 0.08),
                                         width: 1.5,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.04),
+                                          color: Colors.black.withValues(alpha: 0.04),
                                           blurRadius: 24,
                                           offset: const Offset(0, 10),
                                         ),
@@ -373,7 +373,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                         color: theme
                                                             .colorScheme
                                                             .primary
-                                                            .withOpacity(0.25),
+                                                            .withValues(alpha: 0.25),
                                                         blurRadius: 12,
                                                         offset: const Offset(
                                                           0,
@@ -436,7 +436,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildSuccessOverlay(ThemeData theme) {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.55),
+        color: Colors.black.withValues(alpha: 0.55),
         child: Center(
           child: TweenAnimationBuilder<double>(
             duration: const Duration(milliseconds: 650),
@@ -468,7 +468,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: theme.colorScheme.primary.withOpacity(0.25),
+                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
                             blurRadius: 16,
                             spreadRadius: 2,
                           ),
@@ -533,21 +533,21 @@ class _BreathingBackgroundPainter extends CustomPainter {
     final double cx1 = size.width * 0.15 + 60 * math.cos(radian);
     final double cy1 = size.height * 0.15 + 60 * math.sin(radian);
     final double radius1 = size.width * 0.45 + 30 * math.sin(radian);
-    final paint1 = paint..color = theme.colorScheme.primary.withOpacity(0.12);
+    final paint1 = paint..color = theme.colorScheme.primary.withValues(alpha: 0.12);
     canvas.drawCircle(Offset(cx1, cy1), radius1, paint1);
 
     // Blob 2: Soft Violet (bottom-right moving)
     final double cx2 = size.width * 0.8 + 60 * math.cos(radian + math.pi);
     final double cy2 = size.height * 0.75 + 60 * math.sin(radian + math.pi);
     final double radius2 = size.width * 0.5 + 40 * math.cos(radian);
-    final paint2 = paint..color = theme.colorScheme.tertiary.withOpacity(0.10);
+    final paint2 = paint..color = theme.colorScheme.tertiary.withValues(alpha: 0.10);
     canvas.drawCircle(Offset(cx2, cy2), radius2, paint2);
 
     // Blob 3: Emerald (subtle green blob at middle right)
     final double cx3 = size.width * 0.85 + 40 * math.sin(radian * 2);
     final double cy3 = size.height * 0.35 + 40 * math.cos(radian * 2);
     final double radius3 = size.width * 0.3 + 20 * math.sin(radian);
-    final paint3 = paint..color = theme.colorScheme.secondary.withOpacity(0.06);
+    final paint3 = paint..color = theme.colorScheme.secondary.withValues(alpha: 0.06);
     canvas.drawCircle(Offset(cx3, cy3), radius3, paint3);
   }
 

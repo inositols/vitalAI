@@ -100,12 +100,12 @@ class _ChartsPageState extends State<ChartsPage> {
                               : theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: theme.colorScheme.outline.withOpacity(0.15),
+                            color: theme.colorScheme.outline.withValues(alpha: 0.15),
                             width: 1,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -200,8 +200,8 @@ class _ChartsPageState extends State<ChartsPage> {
               selected: isSelected,
               selectedColor: theme.colorScheme.primary,
               backgroundColor: theme.brightness == Brightness.light
-                  ? Colors.grey.withOpacity(0.08)
-                  : theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                  ? Colors.grey.withValues(alpha: 0.08)
+                  : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(
@@ -272,7 +272,7 @@ class _ChartsPageState extends State<ChartsPage> {
           dotData: const FlDotData(show: true),
           belowBarData: BarAreaData(
             show: true,
-            color: theme.colorScheme.primary.withOpacity(0.1),
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
           ),
         ),
       );
@@ -289,7 +289,7 @@ class _ChartsPageState extends State<ChartsPage> {
           dotData: const FlDotData(show: true),
           belowBarData: BarAreaData(
             show: true,
-            color: theme.colorScheme.tertiary.withOpacity(0.1),
+            color: theme.colorScheme.tertiary.withValues(alpha: 0.1),
           ),
         ),
       );

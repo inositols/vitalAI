@@ -42,7 +42,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
+                    color: theme.dividerColor.withValues(alpha: 0.08),
                     width: 1,
                   ),
                 ),
@@ -67,7 +67,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         isLast: true,
                         trailing: CupertinoSwitch(
                           value: state.isHighContrast,
-                          activeColor: theme.colorScheme.primary,
+                          activeTrackColor: theme.colorScheme.primary,
                           onChanged: (val) {
                             context.read<SettingsBloc>().add(ThemeChanged(
                                   themeMode: state.themeMode,
@@ -88,7 +88,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
+                    color: theme.dividerColor.withValues(alpha: 0.08),
                     width: 1,
                   ),
                 ),
@@ -135,7 +135,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
+                    color: theme.dividerColor.withValues(alpha: 0.08),
                     width: 1,
                   ),
                 ),
@@ -152,7 +152,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         isLast: true,
                         trailing: CupertinoSwitch(
                           value: state.aiConsent,
-                          activeColor: theme.colorScheme.primary,
+                          activeTrackColor: theme.colorScheme.primary,
                           onChanged: (val) {
                             context
                                 .read<SettingsBloc>()
@@ -168,11 +168,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
               // 4. Logout Session
               Card(
-                color: theme.colorScheme.errorContainer.withOpacity(0.12),
+                color: theme.colorScheme.errorContainer.withValues(alpha: 0.12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
-                    color: theme.colorScheme.error.withOpacity(0.2),
+                    color: theme.colorScheme.error.withValues(alpha: 0.2),
                     width: 1,
                   ),
                 ),
@@ -244,7 +244,7 @@ class _SettingsPageState extends State<SettingsPage> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.12),
+                color: theme.colorScheme.primary.withValues(alpha: 0.12),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -283,7 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       patientAge,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 13,
                       ),
                       maxLines: 1,
@@ -355,7 +355,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ? Text(
                   subtitle,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                     fontSize: 13,
                   ),
                 )
@@ -373,7 +373,7 @@ class _SettingsPageState extends State<SettingsPage> {
             height: 1,
             indent: 68,
             endIndent: 16,
-            color: theme.dividerColor.withOpacity(0.08),
+            color: theme.dividerColor.withValues(alpha: 0.08),
           ),
       ],
     );

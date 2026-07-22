@@ -164,7 +164,7 @@ class _CaregiverPageState extends State<CaregiverPage> {
                 ),
               ] else
                 Card(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                   child: const Padding(
                     padding: EdgeInsets.all(24.0),
                     child: Text(

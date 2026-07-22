@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -161,7 +160,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 Icon(
                   CupertinoIcons.search,
                   size: 72,
-                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -240,7 +239,7 @@ class _HistoryPageState extends State<HistoryPage> {
                         ? '${r.systolic!.toInt()}/${r.diastolic!.toInt()}'
                         : 'N/A';
                     final glucoseStr = r.glucoseValue != null
-                        ? '${r.glucoseValue!.toStringAsFixed(1)}'
+                        ? r.glucoseValue!.toStringAsFixed(1)
                         : 'N/A';
                     final pulseStr =
                         r.pulseRate != null ? '${r.pulseRate!.toInt()}' : 'N/A';
@@ -357,7 +356,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 side: BorderSide(
                   color: isSelected
                       ? Colors.transparent
-                      : theme.dividerColor.withOpacity(0.08),
+                      : theme.dividerColor.withValues(alpha: 0.08),
                   width: 1,
                 ),
               ),
@@ -381,7 +380,7 @@ class _HistoryPageState extends State<HistoryPage> {
         color: theme.scaffoldBackgroundColor,
         border: Border(
           bottom: BorderSide(
-            color: theme.dividerColor.withOpacity(0.06),
+            color: theme.dividerColor.withValues(alpha: 0.06),
             width: 1,
           ),
         ),
@@ -409,7 +408,7 @@ class _HistoryPageState extends State<HistoryPage> {
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: theme.dividerColor.withOpacity(0.08),
+                          color: theme.dividerColor.withValues(alpha: 0.08),
                           width: 1,
                         ),
                       ),
@@ -476,7 +475,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     side: BorderSide(
                       color: _abnormalOnly
                           ? Colors.transparent
-                          : theme.dividerColor.withOpacity(0.08),
+                          : theme.dividerColor.withValues(alpha: 0.08),
                       width: 1,
                     ),
                   ),
@@ -508,7 +507,7 @@ class _HistoryPageState extends State<HistoryPage> {
     // Choose icon color & background color based on status
     final statusColor =
         isAbnormal ? const Color(0xFFFF5B4E) : const Color(0xFF008A5E);
-    final statusBg = statusColor.withOpacity(0.08);
+    final statusBg = statusColor.withValues(alpha: 0.08);
 
     return Dismissible(
       key: Key(r.id.toString()),
@@ -560,13 +559,13 @@ class _HistoryPageState extends State<HistoryPage> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isAbnormal
-                ? const Color(0xFFFF5B4E).withOpacity(0.25)
-                : theme.dividerColor.withOpacity(0.06),
+                ? const Color(0xFFFF5B4E).withValues(alpha: 0.25)
+                : theme.dividerColor.withValues(alpha: 0.06),
             width: isAbnormal ? 1.5 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -606,7 +605,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     _formatDateTime12h(r.dateTime),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color:
-                          theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                          theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                       fontSize: 11,
                     ),
                   ),
@@ -638,7 +637,7 @@ class _HistoryPageState extends State<HistoryPage> {
                       color: statusBg,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: statusColor.withOpacity(0.15),
+                        color: statusColor.withValues(alpha: 0.15),
                         width: 1,
                       ),
                     ),
@@ -675,7 +674,7 @@ class _HistoryPageState extends State<HistoryPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: theme.scaffoldBackgroundColor.withOpacity(0.5),
+                    color: theme.scaffoldBackgroundColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -684,7 +683,7 @@ class _HistoryPageState extends State<HistoryPage> {
                         CupertinoIcons.doc_plaintext,
                         size: 14,
                         color:
-                            theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                            theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -694,7 +693,7 @@ class _HistoryPageState extends State<HistoryPage> {
                             fontSize: 12.5,
                             fontStyle: FontStyle.italic,
                             color: theme.colorScheme.onSurfaceVariant
-                                .withOpacity(0.8),
+                                .withValues(alpha: 0.8),
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -714,8 +713,9 @@ class _HistoryPageState extends State<HistoryPage> {
   String _getReadingTitle(VitalRecord r) {
     if (r.systolic != null) return 'Blood Pressure';
     if (r.glucoseValue != null) return 'Blood Glucose';
-    if (r.pulseRate != null && r.oxygenSaturation != null)
+    if (r.pulseRate != null && r.oxygenSaturation != null) {
       return 'Pulse & SpO₂';
+    }
     if (r.pulseRate != null) return 'Heart Rate';
     if (r.bodyTemperature != null) return 'Body Temperature';
     if (r.weight != null) return 'Body Weight';
@@ -781,13 +781,17 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   bool _checkAbnormalStatus(VitalRecord r) {
-    if (r.systolic != null && (r.systolic! >= 130 || r.systolic! < 90))
+    if (r.systolic != null && (r.systolic! >= 130 || r.systolic! < 90)) {
       return true;
-    if (r.diastolic != null && (r.diastolic! >= 85 || r.diastolic! < 60))
+    }
+    if (r.diastolic != null && (r.diastolic! >= 85 || r.diastolic! < 60)) {
       return true;
+    }
     if (r.oxygenSaturation != null && r.oxygenSaturation! < 95) return true;
     if (r.glucoseValue != null &&
-        (r.glucoseValue! >= 140 || r.glucoseValue! < 70)) return true;
+        (r.glucoseValue! >= 140 || r.glucoseValue! < 70)) {
+      return true;
+    }
     return false;
   }
 

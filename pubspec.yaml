@@ -68,6 +68,7 @@ dependencies:
 
   # AI Gemini Integration
   google_generative_ai: ^0.4.5
+  speech_to_text: ^7.0.0
 
   # Helpers
   equatable: ^2.0.5
