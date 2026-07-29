@@ -80,45 +80,48 @@ class SettingTileItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
 
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: iconBg,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          boxShadow: [
-            BoxShadow(
-              color: iconBg.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            boxShadow: [
+              BoxShadow(
+                color: iconBg.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 20),
         ),
-        child: Icon(icon, color: Colors.white, size: 20),
-      ),
-      title: Text(
-        title,
-        style: context.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
+        title: Text(
+          title,
+          style: context.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
         ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: context.textTheme.bodySmall?.copyWith(
-          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-          fontSize: 12,
+        subtitle: Text(
+          subtitle,
+          style: context.textTheme.bodySmall?.copyWith(
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            fontSize: 12,
+          ),
         ),
+        trailing: trailing ??
+            (onTap != null
+                ? Icon(
+                    Icons.chevron_right_rounded,
+                    size: 22,
+                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                  )
+                : null),
       ),
-      trailing: trailing ??
-          (onTap != null
-              ? Icon(
-                  Icons.chevron_right_rounded,
-                  size: 22,
-                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                )
-              : null),
     );
   }
 }

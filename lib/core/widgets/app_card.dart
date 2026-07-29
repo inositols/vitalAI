@@ -44,6 +44,17 @@ class AppCard extends StatelessWidget {
       child: child,
     );
 
+    Widget body = cardContent;
+    if (onTap != null) {
+      body = InkWell(
+        onTap: onTap,
+        splashColor: context.colorScheme.primary.withValues(alpha: 0.08),
+        highlightColor: context.colorScheme.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: body,
+      );
+    }
+
     return Container(
       margin: margin,
       decoration: BoxDecoration(
@@ -54,22 +65,14 @@ class AppCard extends StatelessWidget {
         color: gradient == null ? effectiveColor : Colors.transparent,
         borderRadius: BorderRadius.circular(borderRadius),
         clipBehavior: Clip.antiAlias,
+        type: MaterialType.canvas,
         child: Container(
           decoration: BoxDecoration(
-            color: gradient == null ? effectiveColor : null,
             gradient: gradient,
             borderRadius: BorderRadius.circular(borderRadius),
             border: effectiveBorder,
           ),
-          child: onTap != null
-              ? InkWell(
-                  onTap: onTap,
-                  splashColor: context.colorScheme.primary.withValues(alpha: 0.08),
-                  highlightColor: context.colorScheme.primary.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(borderRadius),
-                  child: cardContent,
-                )
-              : cardContent,
+          child: body,
         ),
       ),
     );
