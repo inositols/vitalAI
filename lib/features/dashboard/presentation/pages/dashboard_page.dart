@@ -8,6 +8,9 @@ import '../../../vitals/presentation/bloc/vitals_event.dart';
 import '../../../vitals/presentation/bloc/vitals_state.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/notifications/notification_service.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_shimmer.dart';
 
 import '../widgets/dashboard_header.dart';
 import '../widgets/vitals_summary_grid.dart';
@@ -52,7 +55,20 @@ class _DashboardPageState extends State<DashboardPage> {
         builder: (context, state) {
           if (state is PatientLoading) {
             return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              body: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      AppShimmer.card(height: 80),
+                      SizedBox(height: 16),
+                      AppShimmer.card(height: 140),
+                      SizedBox(height: 16),
+                      AppShimmer.card(height: 180),
+                    ],
+                  ),
+                ),
+              ),
             );
           }
 
@@ -68,17 +84,94 @@ class _DashboardPageState extends State<DashboardPage> {
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.people_alt_outlined),
-                    tooltip: 'Patient Profiles',
+                    tooltip: 'Switch Patient Profile',
                     onPressed: () => context.go('/patients'),
                   ),
                 ],
               ),
               body: SafeArea(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // AI Health Score & Insight Hero Card
+                      AppCard(
+                        gradient: AppColors.aiGradient,
+                        padding: const EdgeInsets.all(20),
+                        boxShadow: AppShadows.aiGlow(context),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.2),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.auto_awesome_rounded,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'AI Clinical Insight',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'Vitals are stable today',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Blood pressure and pulse show optimal trends over the last 7 days.',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: () => context.go('/ai-chat'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: AppColors.tertiaryDark,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                                ),
+                              ),
+                              child: const Text('Consult', style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
                       // Latest Vitals Summary Grid
                       BlocBuilder<VitalsBloc, VitalsState>(
                         builder: (context, vitalsState) {
@@ -86,7 +179,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           if (vitalsState is VitalsLoadSuccess && vitalsState.records.isNotEmpty) {
                             for (var v in vitalsState.records) {
                               if (v.systolic != null && v.diastolic != null && !vitalsMap.containsKey('bp')) {
-                                vitalsMap['bp'] = '${v.systolic!.toInt()}/${v.diastolic!.toInt()} mmHg';
+                                vitalsMap['bp'] = '${v.systolic!.toInt()}/${v.diastolic!.toInt()}';
                               }
                               if (v.glucoseValue != null && !vitalsMap.containsKey('glucose')) {
                                 vitalsMap['glucose'] = '${v.glucoseValue!.toInt()} mg/dL';
@@ -103,7 +196,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           );
                         },
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
 
                       // Quick Actions Grid
                       DashboardQuickActions(
@@ -112,15 +205,23 @@ class _DashboardPageState extends State<DashboardPage> {
                         onViewCharts: () => context.go('/charts'),
                         onViewHistory: () => context.go('/history'),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
 
                       // Reminders Overview Card
                       TodayRemindersCard(
                         onManageReminders: () => context.go('/settings'),
                       ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
+              ),
+              floatingActionButton: FloatingActionButton.extended(
+                onPressed: () => context.go('/add-vital'),
+                icon: const Icon(Icons.add_rounded, color: Colors.white),
+                label: const Text('Record Vital', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                backgroundColor: AppColors.primary,
+                elevation: 6,
               ),
             );
           }
@@ -130,11 +231,15 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('No Patient Profile Selected'),
-                  const SizedBox(height: 12),
+                  const Icon(Icons.account_circle_outlined, size: 64, color: AppColors.primary),
+                  const SizedBox(height: 16),
+                  const Text('No Patient Profile Selected', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Please select or add a patient profile to continue'),
+                  const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () => context.go('/patients'),
-                    child: const Text('Select Patient'),
+                    child: const Text('Select Patient Profile'),
                   ),
                 ],
               ),

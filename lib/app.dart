@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:device_preview/device_preview.dart';
 import 'core/di/injection.dart';
 import 'core/routing/router.dart';
 import 'core/theme/theme.dart';
@@ -48,8 +47,6 @@ class VitalApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: settings.themeMode,
             routerConfig: AppRouter.router,
-            locale: DevicePreview.locale(context),
-            builder: DevicePreview.appBuilder,
             debugShowCheckedModeBanner: false,
           );
         },

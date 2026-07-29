@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../data/models/patient_model.dart';
 
 class PatientFormModal extends StatefulWidget {
@@ -20,21 +22,32 @@ class PatientFormModal extends StatefulWidget {
 class _PatientFormModalState extends State<PatientFormModal> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
+  late TextEditingController _ageController;
   late TextEditingController _heightController;
   late TextEditingController _weightController;
   late TextEditingController _contactController;
   String _gender = 'Male';
-  DateTime _dob = DateTime.now().subtract(const Duration(days: 365 * 30));
+  late DateTime _dob;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _dob = widget.patient?.dateOfBirth ?? now.subtract(const Duration(days: 365 * 30));
+
+    int calculatedAge = now.year - _dob.year;
+    if (now.month < _dob.month || (now.month == _dob.month && now.day < _dob.day)) {
+      calculatedAge--;
+    }
+    if (calculatedAge < 0) calculatedAge = 30;
+
     _nameController = TextEditingController(text: widget.patient?.name ?? '');
+    _ageController = TextEditingController(text: calculatedAge.toString());
     _heightController = TextEditingController(
-      text: widget.patient != null ? widget.patient!.height.toString() : '170',
+      text: widget.patient != null ? widget.patient!.height.toStringAsFixed(0) : '170',
     );
     _weightController = TextEditingController(
-      text: widget.patient != null ? widget.patient!.weight.toString() : '70',
+      text: widget.patient != null ? widget.patient!.weight.toStringAsFixed(0) : '70',
     );
     _contactController = TextEditingController(
       text: widget.patient?.emergencyContact ?? '',
@@ -42,17 +55,37 @@ class _PatientFormModalState extends State<PatientFormModal> {
 
     if (widget.patient != null) {
       _gender = widget.patient!.gender;
-      _dob = widget.patient!.dateOfBirth;
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _ageController.dispose();
     _heightController.dispose();
     _weightController.dispose();
     _contactController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dob,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() {
+        _dob = picked;
+        int age = now.year - picked.year;
+        if (now.month < picked.month || (now.month == picked.month && now.day < picked.day)) {
+          age--;
+        }
+        _ageController.text = (age < 0 ? 0 : age).toString();
+      });
+    }
   }
 
   void _submit() {
@@ -62,9 +95,13 @@ class _PatientFormModalState extends State<PatientFormModal> {
         p.remoteId = const Uuid().v4();
       }
 
+      final parsedAge = int.tryParse(_ageController.text.trim()) ?? 30;
+      final now = DateTime.now();
+      // Adjust DOB based on entered age if user didn't pick date explicitly
+      p.dateOfBirth = DateTime(now.year - parsedAge, _dob.month, _dob.day);
+
       p.name = _nameController.text.trim();
       p.gender = _gender;
-      p.dateOfBirth = _dob;
       p.height = double.tryParse(_heightController.text.trim()) ?? 170.0;
       p.weight = double.tryParse(_weightController.text.trim()) ?? 70.0;
       p.emergencyContact = _contactController.text.trim();
@@ -78,15 +115,17 @@ class _PatientFormModalState extends State<PatientFormModal> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return Container(
       padding: EdgeInsets.only(
-        top: 24,
+        top: 20,
         left: 24,
         right: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       decoration: BoxDecoration(
-        color: context.colorScheme.surface,
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
@@ -96,48 +135,107 @@ class _PatientFormModalState extends State<PatientFormModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                widget.patient != null ? 'Edit Profile' : 'Add New Patient Profile',
-                style: context.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                    child: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    widget.patient != null ? 'Edit Patient Profile' : 'Add New Patient Profile',
+                    style: context.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
               TextFormField(
                 controller: _nameController,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'Full Name',
-                  prefixIcon: Icon(Icons.person),
+                  hintText: 'e.g. Eleanor Vance',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
                 ),
                 validator: (val) =>
                     val == null || val.trim().isEmpty ? 'Name is required' : null,
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _gender,
-                decoration: const InputDecoration(
-                  labelText: 'Gender',
-                  prefixIcon: Icon(Icons.wc),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'Male', child: Text('Male')),
-                  DropdownMenuItem(value: 'Female', child: Text('Female')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _ageController,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'Age (Years)',
+                        hintText: '35',
+                        prefixIcon: const Icon(Icons.cake_outlined),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                          tooltip: 'Pick Date of Birth',
+                          onPressed: _pickDateOfBirth,
+                        ),
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) return 'Age required';
+                        final num = int.tryParse(val.trim());
+                        if (num == null || num < 0 || num > 120) return 'Invalid age';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _gender,
+                      decoration: const InputDecoration(
+                        labelText: 'Gender',
+                        prefixIcon: Icon(Icons.wc_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'Male', child: Text('Male')),
+                        DropdownMenuItem(value: 'Female', child: Text('Female')),
+                        DropdownMenuItem(value: 'Other', child: Text('Other')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _gender = val);
+                      },
+                    ),
+                  ),
                 ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _gender = val);
-                },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
                       controller: _heightController,
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Height (cm)',
-                        prefixIcon: Icon(Icons.height),
+                        hintText: '170',
+                        prefixIcon: Icon(Icons.height_rounded),
                       ),
                     ),
                   ),
@@ -146,36 +244,43 @@ class _PatientFormModalState extends State<PatientFormModal> {
                     child: TextFormField(
                       controller: _weightController,
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Weight (kg)',
-                        prefixIcon: Icon(Icons.scale),
+                        hintText: '70',
+                        prefixIcon: Icon(Icons.monitor_weight_outlined),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _contactController,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
-                  labelText: 'Emergency Contact',
-                  prefixIcon: Icon(Icons.phone),
+                  labelText: 'Emergency Phone Contact',
+                  hintText: '+1 555 019 2831',
+                  prefixIcon: Icon(Icons.phone_outlined),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: AppButton(
+                      label: 'Cancel',
+                      isOutlined: true,
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
+                    child: AppButton(
+                      label: 'Save Profile',
                       onPressed: _submit,
-                      child: const Text('Save Profile'),
+                      icon: Icons.check_circle_outline_rounded,
                     ),
                   ),
                 ],

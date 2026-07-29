@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../extensions/build_context_ext.dart';
+import '../theme/design_tokens.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -7,7 +8,10 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? margin;
   final VoidCallback? onTap;
   final Color? backgroundColor;
+  final Gradient? gradient;
   final Border? border;
+  final double borderRadius;
+  final List<BoxShadow>? boxShadow;
 
   const AppCard({
     super.key,
@@ -16,40 +20,58 @@ class AppCard extends StatelessWidget {
     this.margin,
     this.onTap,
     this.backgroundColor,
+    this.gradient,
     this.border,
+    this.borderRadius = AppRadius.xl,
+    this.boxShadow,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cardContent = Container(
-      padding: padding ?? const EdgeInsets.all(16),
-      margin: margin,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? context.theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        border: border ??
-            Border.all(
-              color: context.colorScheme.outlineVariant.withValues(alpha: 0.4),
-            ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final isDark = context.isDarkMode;
+    final effectiveColor = backgroundColor ?? (isDark ? AppColors.darkCard : Colors.white);
+    final defaultBorder = Border.all(
+      color: isDark
+          ? AppColors.darkBorder
+          : context.colorScheme.outlineVariant.withValues(alpha: 0.6),
+      width: 1,
+    );
+    final effectiveBorder = border ?? defaultBorder;
+    final effectiveShadow = boxShadow ?? AppShadows.subtle(context);
+
+    final cardContent = Padding(
+      padding: padding ?? AppSpacing.cardPadding,
       child: child,
     );
 
-    if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: cardContent,
-      );
-    }
-
-    return cardContent;
+    return Container(
+      margin: margin,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: effectiveShadow,
+      ),
+      child: Material(
+        color: gradient == null ? effectiveColor : Colors.transparent,
+        borderRadius: BorderRadius.circular(borderRadius),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            color: gradient == null ? effectiveColor : null,
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: effectiveBorder,
+          ),
+          child: onTap != null
+              ? InkWell(
+                  onTap: onTap,
+                  splashColor: context.colorScheme.primary.withValues(alpha: 0.08),
+                  highlightColor: context.colorScheme.primary.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  child: cardContent,
+                )
+              : cardContent,
+        ),
+      ),
+    );
   }
 }

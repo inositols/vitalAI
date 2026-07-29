@@ -10,6 +10,9 @@ extension BuildContextExt on BuildContext {
   /// Color Scheme shorthand
   ColorScheme get colorScheme => Theme.of(this).colorScheme;
 
+  /// Check if current theme is Dark Mode
+  bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
+
   /// MediaQuery Size shorthand
   Size get screenSize => MediaQuery.of(this).size;
 

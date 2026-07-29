@@ -4,6 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_bloc.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_state.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_empty_state.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../../../patients/data/models/patient_model.dart';
@@ -100,9 +105,12 @@ class _AddVitalPageState extends State<AddVitalPage>
         ..weight = weight
         ..bmi = bmi
         ..note = _noteController.text.trim()
-        ..deviceUsed = _deviceController.text.trim();
+        ..deviceUsed = _deviceController.text.trim()
+        ..isSynced = false
+        ..updatedAt = DateTime.now();
 
       context.read<VitalsBloc>().add(VitalsRecordSaved(record));
+      context.showSnackBar('Vital reading recorded successfully');
       context.go('/');
     }
   }
@@ -110,12 +118,17 @@ class _AddVitalPageState extends State<AddVitalPage>
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsBloc>().state;
+    final isDark = context.isDarkMode;
 
     return BlocBuilder<PatientBloc, PatientState>(
       builder: (context, patientState) {
         if (patientState is! PatientLoadSuccess || patientState.activePatient == null) {
           return const Scaffold(
-            body: Center(child: Text("Please select a patient profile first.")),
+            body: AppEmptyState(
+              icon: Icons.person_search_rounded,
+              title: 'No Active Patient Profile',
+              message: 'Select a patient profile before adding vital readings.',
+            ),
           );
         }
 
@@ -123,65 +136,93 @@ class _AddVitalPageState extends State<AddVitalPage>
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Log Health Reading'),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Log Vital Reading', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text(
+                  'Patient: ${patient.name}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
             bottom: TabBar(
               controller: _tabController,
               isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 3,
               tabs: const [
-                Tab(icon: Icon(Icons.favorite), text: 'BP & Pulse'),
-                Tab(icon: Icon(Icons.water_drop), text: 'Glucose'),
-                Tab(icon: Icon(Icons.air), text: 'SpO₂'),
-                Tab(icon: Icon(Icons.thermostat), text: 'Temp'),
-                Tab(icon: Icon(Icons.scale), text: 'Weight'),
+                Tab(icon: Icon(Icons.favorite_rounded), text: 'BP & Pulse'),
+                Tab(icon: Icon(Icons.water_drop_rounded), text: 'Glucose'),
+                Tab(icon: Icon(Icons.air_rounded), text: 'SpO₂'),
+                Tab(icon: Icon(Icons.device_thermostat_rounded), text: 'Temp'),
+                Tab(icon: Icon(Icons.scale_rounded), text: 'Weight'),
               ],
             ),
           ),
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    VitalInputFields(
-                      activeTabIndex: _activeTabIndex,
-                      systolicController: _systolicController,
-                      diastolicController: _diastolicController,
-                      glucoseController: _glucoseController,
-                      pulseController: _pulseController,
-                      spo2Controller: _spo2Controller,
-                      tempController: _tempController,
-                      weightController: _weightController,
-                      glucoseMealContext: _glucoseMealContext,
-                      onGlucoseMealContextChanged: (val) =>
-                          setState(() => _glucoseMealContext = val),
-                      settings: settings,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _deviceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Device Used (Optional)',
-                        prefixIcon: Icon(Icons.devices),
-                        hintText: 'e.g. Omron Evolv, Dexcom G7',
+                    AppCard(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          VitalInputFields(
+                            activeTabIndex: _activeTabIndex,
+                            systolicController: _systolicController,
+                            diastolicController: _diastolicController,
+                            glucoseController: _glucoseController,
+                            pulseController: _pulseController,
+                            spo2Controller: _spo2Controller,
+                            tempController: _tempController,
+                            weightController: _weightController,
+                            glucoseMealContext: _glucoseMealContext,
+                            onGlucoseMealContextChanged: (val) =>
+                                setState(() => _glucoseMealContext = val),
+                            settings: settings,
+                          ),
+                          const SizedBox(height: 18),
+                          TextFormField(
+                            controller: _deviceController,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Device Used (Optional)',
+                              prefixIcon: Icon(Icons.devices_other_rounded),
+                              hintText: 'e.g. Omron Evolv, Dexcom G7',
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _noteController,
+                            maxLines: 2,
+                            textInputAction: TextInputAction.done,
+                            decoration: const InputDecoration(
+                              labelText: 'Notes & Symptoms (Optional)',
+                              prefixIcon: Icon(Icons.note_alt_outlined),
+                              hintText: 'e.g. Took reading before morning meal',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _noteController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Notes / Symptoms (Optional)',
-                        prefixIcon: Icon(Icons.note_alt_outlined),
-                        hintText: 'e.g. Felt slightly dizzy before taking reading',
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Vital Reading'),
+                    const SizedBox(height: 24),
+                    AppButton(
+                      label: 'Save Vital Reading',
                       onPressed: () => _save(patient, settings),
+                      icon: Icons.check_circle_rounded,
                     ),
                   ],
                 ),

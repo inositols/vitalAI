@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
 
 class ApiKeyDialog extends StatefulWidget {
   final String currentApiKey;
@@ -32,24 +32,36 @@ class _ApiKeyDialogState extends State<ApiKeyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AlertDialog(
-      title: const Text('Gemini API Key'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xxl)),
+      title: const Row(
+        children: [
+          Icon(Icons.auto_awesome_rounded, color: AppColors.tertiary, size: 24),
+          SizedBox(width: 10),
+          Text('Gemini API Key'),
+        ],
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Enter your custom Gemini API Key for live AI responses.',
-            style: context.textTheme.bodySmall?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
+            'Enter your custom Gemini API Key for live AI responses and recommendations.',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           TextField(
             controller: _apiKeyController,
             decoration: const InputDecoration(
-              hintText: 'Enter Gemini API key...',
+              hintText: 'AIzaSy...',
               labelText: 'API Key',
+              prefixIcon: Icon(Icons.key_rounded),
             ),
           ),
         ],

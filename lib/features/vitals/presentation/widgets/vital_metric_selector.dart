@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
 
 class VitalMetricSelector extends StatelessWidget {
   final String activeTab;
@@ -12,15 +13,17 @@ class VitalMetricSelector extends StatelessWidget {
   });
 
   static const _chips = [
-    {'id': 'bp', 'label': 'Blood Pressure', 'icon': Icons.favorite_outline},
-    {'id': 'glucose', 'label': 'Glucose', 'icon': Icons.opacity},
-    {'id': 'pulse', 'label': 'Pulse Rate', 'icon': Icons.heart_broken_outlined},
-    {'id': 'temp', 'label': 'Temperature', 'icon': Icons.thermostat_outlined},
-    {'id': 'weight', 'label': 'Weight', 'icon': Icons.scale_outlined},
+    {'id': 'bp', 'label': 'Blood Pressure', 'icon': Icons.favorite_rounded, 'color': AppColors.bpVital},
+    {'id': 'glucose', 'label': 'Glucose', 'icon': Icons.water_drop_rounded, 'color': AppColors.glucoseVital},
+    {'id': 'pulse', 'label': 'Pulse Rate', 'icon': Icons.monitor_heart_rounded, 'color': AppColors.pulseVital},
+    {'id': 'temp', 'label': 'Temperature', 'icon': Icons.device_thermostat_rounded, 'color': AppColors.tempVital},
+    {'id': 'weight', 'label': 'Weight', 'icon': Icons.scale_rounded, 'color': AppColors.weightVital},
   ];
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -28,34 +31,38 @@ class VitalMetricSelector extends StatelessWidget {
         children: _chips.map((chip) {
           final id = chip['id'] as String;
           final isSelected = activeTab == id;
+          final chipColor = chip['color'] as Color;
+
           return Padding(
             padding: const EdgeInsets.only(right: 10.0),
-            child: ChoiceChip(
+            child: FilterChip(
               avatar: Icon(
                 chip['icon'] as IconData,
-                color: isSelected ? Colors.white : context.colorScheme.primary,
+                color: isSelected ? Colors.white : chipColor,
                 size: 18,
               ),
               label: Text(
                 chip['label'] as String,
                 style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.white : context.colorScheme.onSurface,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
                 ),
               ),
               selected: isSelected,
-              selectedColor: context.colorScheme.primary,
-              backgroundColor: context.theme.brightness == Brightness.light
-                  ? Colors.grey.withValues(alpha: 0.08)
-                  : context.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              selectedColor: chipColor,
+              backgroundColor: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.full),
                 side: BorderSide(
-                  color: isSelected ? context.colorScheme.primary : Colors.transparent,
+                  color: isSelected ? chipColor : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
                   width: 1,
                 ),
               ),
               showCheckmark: false,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               onSelected: (val) {
                 if (val) onSelectTab(id);
               },

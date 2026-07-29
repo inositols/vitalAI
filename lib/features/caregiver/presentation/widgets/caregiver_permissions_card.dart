@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 
 class CaregiverPermissionsCard extends StatelessWidget {
   final bool shareVitals;
@@ -20,26 +23,41 @@ class CaregiverPermissionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final isDark = context.isDarkMode;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
           CheckboxListTile(
-            title: const Text('Share Vitals Logs'),
-            subtitle: const Text('Includes blood pressure, glucose, SpO2, etc.'),
+            activeColor: AppColors.primary,
+            title: const Text('Share Vitals Logs', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text(
+              'Includes blood pressure, glucose, SpO2, and weight',
+              style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            ),
             value: shareVitals,
             onChanged: (val) => onShareVitalsChanged(val ?? false),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
           CheckboxListTile(
-            title: const Text('Share AI Insights Summaries'),
-            subtitle: const Text('Includes assistant summaries & alerts'),
+            activeColor: AppColors.primary,
+            title: const Text('Share AI Insight Summaries', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text(
+              'Includes automated AI clinical observations & suggestions',
+              style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            ),
             value: shareInsights,
             onChanged: (val) => onShareInsightsChanged(val ?? false),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
           CheckboxListTile(
-            title: const Text('Critical Vitals Alert SMS/FCM'),
-            subtitle: const Text('Sends alerts immediately for emergency readings'),
+            activeColor: AppColors.error,
+            title: const Text('Critical Vitals Emergency Alerts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text(
+              'Sends instant notification alerts for abnormal readings',
+              style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            ),
             value: notifyOnCritical,
             onChanged: (val) => onNotifyOnCriticalChanged(val ?? false),
           ),

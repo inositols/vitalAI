@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../data/models/caregiver_model.dart';
 
 class CaregiverListCard extends StatelessWidget {
@@ -13,27 +16,47 @@ class CaregiverListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     if (caregivers.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(20.0),
-          child: Text(
-            'No connected caregivers yet. Invite a trusted caregiver below.',
-            textAlign: TextAlign.center,
-          ),
+      return AppCard(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            const Icon(Icons.people_outline_rounded, size: 40, color: AppColors.primary),
+            const SizedBox(height: 10),
+            Text(
+              'No Connected Caregivers',
+              style: context.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Invite family members or clinical guardians to monitor logs remotely.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            ),
+          ],
         ),
       );
     }
 
-    return Card(
+    return AppCard(
+      padding: EdgeInsets.zero,
       child: Column(
         children: caregivers.map((cg) {
           return ListTile(
-            title: Text(cg.name),
-            subtitle: Text(cg.email),
-            leading: const CircleAvatar(child: Icon(Icons.person)),
+            title: Text(cg.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text(cg.email, style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+              child: Text(
+                cg.name.isNotEmpty ? cg.name[0].toUpperCase() : 'C',
+                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+              ),
+            ),
             trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+              tooltip: 'Revoke access',
               onPressed: () => onDelete(cg),
             ),
           );

@@ -9,6 +9,9 @@ import 'package:vitalai/features/vitals/presentation/pages/add_vital_page.dart';
 import 'package:vitalai/features/patients/presentation/pages/patients_page.dart';
 import 'package:vitalai/features/caregiver/presentation/pages/caregiver_page.dart';
 import 'package:vitalai/features/auth/presentation/pages/login_page.dart';
+import 'package:vitalai/features/onboarding/presentation/pages/splash_page.dart';
+import 'package:vitalai/features/onboarding/presentation/pages/onboarding_page.dart';
+import 'package:vitalai/core/theme/design_tokens.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'root',
@@ -18,8 +21,16 @@ final GlobalKey<NavigatorState> _shellNavigatorKey =
 
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
-  initialLocation: '/login',
+  initialLocation: '/splash',
   routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingPage(),
+    ),
     GoRoute(
       path: '/login',
       builder: (context, state) => const LoginPage(),
@@ -90,36 +101,27 @@ class MainShellScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String currentLoc = GoRouterState.of(context).uri.path;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final destinations = const [
       NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard),
+        icon: Icon(Icons.grid_view_outlined),
+        selectedIcon: Icon(Icons.grid_view_rounded, color: AppColors.primary),
         label: 'Dashboard',
       ),
       NavigationDestination(
         icon: Icon(Icons.auto_awesome_outlined),
-        selectedIcon: Icon(Icons.auto_awesome),
+        selectedIcon: Icon(Icons.auto_awesome_rounded, color: AppColors.tertiary),
         label: 'AI Companion',
       ),
       NavigationDestination(
-        icon: Icon(Icons.insert_chart_outlined),
-        selectedIcon: Icon(Icons.insert_chart),
-        label: 'Charts',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.history_outlined),
-        selectedIcon: Icon(Icons.history),
-        label: 'History',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.share_outlined),
-        selectedIcon: Icon(Icons.share),
-        label: 'Caregiver',
+        icon: Icon(Icons.show_chart_outlined),
+        selectedIcon: Icon(Icons.show_chart_rounded, color: AppColors.primary),
+        label: 'Analytics',
       ),
       NavigationDestination(
         icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
+        selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
         label: 'Settings',
       ),
     ];
@@ -131,13 +133,11 @@ class MainShellScaffold extends StatelessWidget {
         case '/ai-chat':
           return 1;
         case '/charts':
-          return 2;
         case '/history':
-          return 3;
-        case '/caregiver':
-          return 4;
+          return 2;
         case '/settings':
-          return 5;
+        case '/caregiver':
+          return 3;
         default:
           return 0;
       }
@@ -155,12 +155,6 @@ class MainShellScaffold extends StatelessWidget {
           context.go('/charts');
           break;
         case 3:
-          context.go('/history');
-          break;
-        case 4:
-          context.go('/caregiver');
-          break;
-        case 5:
           context.go('/settings');
           break;
       }
@@ -178,10 +172,36 @@ class MainShellScaffold extends StatelessWidget {
       },
       child: Scaffold(
         body: child,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: getSelectedIndex(),
-          onDestinationSelected: onItemTapped,
-          destinations: destinations,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                width: 1,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.3)
+                    : const Color(0xFF64748B).withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: NavigationBar(
+            height: 68,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            indicatorColor: getSelectedIndex() == 1
+                ? AppColors.tertiary.withValues(alpha: 0.15)
+                : AppColors.primary.withValues(alpha: 0.15),
+            selectedIndex: getSelectedIndex(),
+            onDestinationSelected: onItemTapped,
+            destinations: destinations,
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_action_bar.dart';
 
@@ -35,12 +36,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
   void _toggleSpeech() {
     setState(() => _isSpeaking = !_isSpeaking);
-    context.showSnackBar(_isSpeaking ? 'Playing voice audio...' : 'Audio stopped');
+    context.showSnackBar(_isSpeaking ? 'Playing audio preview...' : 'Audio playback stopped');
   }
 
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
+    final isDark = context.isDarkMode;
 
     if (message.isSystem) {
       return _buildSystemBubble(context);
@@ -53,7 +55,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 14.0),
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Column(
         crossAxisAlignment:
             isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -65,25 +67,25 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
             children: [
               if (!isUser) ...[
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        context.colorScheme.primary,
-                        context.colorScheme.tertiaryContainer,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: AppColors.aiGradient,
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.tertiary.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: const Icon(
-                    Icons.auto_awesome,
+                    Icons.auto_awesome_rounded,
                     size: 16,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
               ],
               Flexible(
                 child: Column(
@@ -92,19 +94,34 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       : CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                       decoration: BoxDecoration(
+                        gradient: isUser ? AppColors.primaryGradient : null,
                         color: isUser
-                            ? context.colorScheme.primary
+                            ? null
                             : isFailed
-                                ? context.colorScheme.errorContainer
-                                : context.colorScheme.surfaceContainerHigh,
+                                ? AppColors.errorContainer
+                                : (isDark ? AppColors.darkCard : Colors.white),
+                        border: isUser || isFailed
+                            ? null
+                            : Border.all(
+                                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                              ),
                         borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(18),
-                          topRight: const Radius.circular(18),
-                          bottomLeft: Radius.circular(isUser ? 18 : 4),
-                          bottomRight: Radius.circular(isUser ? 4 : 18),
+                          topLeft: const Radius.circular(20),
+                          topRight: const Radius.circular(20),
+                          bottomLeft: Radius.circular(isUser ? 20 : 4),
+                          bottomRight: Radius.circular(isUser ? 4 : 20),
                         ),
+                        boxShadow: isUser
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : AppShadows.subtle(context),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,14 +130,15 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                             message.content,
                             style: context.textTheme.bodyMedium?.copyWith(
                               color: isUser
-                                  ? context.colorScheme.onPrimary
+                                  ? Colors.white
                                   : isFailed
-                                      ? context.colorScheme.onErrorContainer
-                                      : context.colorScheme.onSurface,
-                              height: 1.4,
+                                      ? AppColors.error
+                                      : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
+                              height: 1.5,
+                              fontSize: 15,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.end,
@@ -128,20 +146,20 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                               Text(
                                 timeStr,
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
                                   color: isUser
-                                      ? context.colorScheme.onPrimary
-                                          .withValues(alpha: 0.7)
-                                      : context.colorScheme.onSurfaceVariant,
+                                      ? Colors.white.withValues(alpha: 0.75)
+                                      : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                                 ),
                               ),
                               if (isPending) ...[
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 6),
                                 const SizedBox(
-                                  width: 10,
-                                  height: 10,
+                                  width: 12,
+                                  height: 12,
                                   child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
+                                    strokeWidth: 1.8,
                                     color: Colors.white,
                                   ),
                                 ),
@@ -177,10 +195,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
             ],
           ),
           if (isFailed && widget.onRetry != null)
-            TextButton.icon(
-              icon: const Icon(Icons.refresh, size: 14),
-              label: const Text('Failed to send. Tap to retry'),
-              onPressed: widget.onRetry,
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                icon: const Icon(Icons.refresh_rounded, size: 14),
+                label: const Text('Failed to send. Tap to retry', style: TextStyle(color: AppColors.error, fontSize: 12)),
+                onPressed: widget.onRetry,
+              ),
             ),
         ],
       ),
@@ -188,19 +209,24 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   }
 
   Widget _buildSystemBubble(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return Center(
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: context.colorScheme.surfaceContainerHighest
-              .withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(12),
+          color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
         ),
         child: Text(
           widget.message.content,
           style: context.textTheme.labelSmall?.copyWith(
-            color: context.colorScheme.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

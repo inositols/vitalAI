@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 
 class SettingsSection extends StatelessWidget {
   final String title;
@@ -13,6 +15,8 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -21,24 +25,32 @@ class SettingsSection extends StatelessWidget {
           child: Text(
             title,
             style: context.textTheme.labelLarge?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
               letterSpacing: 0.5,
             ),
           ),
         ),
-        Card(
+        AppCard(
           margin: const EdgeInsets.only(bottom: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: context.colorScheme.outlineVariant.withValues(alpha: 0.3),
-              width: 1,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(children: children),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            children: List.generate(children.length, (index) {
+              final child = children[index];
+              final isLast = index == children.length - 1;
+              if (isLast) return child;
+              return Column(
+                children: [
+                  child,
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    indent: 56,
+                  ),
+                ],
+              );
+            }),
           ),
         ),
       ],
@@ -66,29 +78,47 @@ class SettingTileItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return ListTile(
       onTap: onTap,
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: iconBg,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          boxShadow: [
+            BoxShadow(
+              color: iconBg.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Icon(icon, color: Colors.white, size: 20),
       ),
       title: Text(
         title,
         style: context.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
         ),
       ),
       subtitle: Text(
         subtitle,
         style: context.textTheme.bodySmall?.copyWith(
-          color: context.colorScheme.onSurfaceVariant,
+          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+          fontSize: 12,
         ),
       ),
-      trailing: trailing ?? (onTap != null ? const Icon(Icons.chevron_right, size: 20) : null),
+      trailing: trailing ??
+          (onTap != null
+              ? Icon(
+                  Icons.chevron_right_rounded,
+                  size: 22,
+                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                )
+              : null),
     );
   }
 }

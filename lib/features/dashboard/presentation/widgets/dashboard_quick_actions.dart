@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
 
 class DashboardQuickActions extends StatelessWidget {
   final VoidCallback onLogVitals;
@@ -23,44 +24,49 @@ class DashboardQuickActions extends StatelessWidget {
         Text(
           'Quick Actions',
           style: context.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: _ActionButton(
-                icon: Icons.add_circle_outline,
+                icon: Icons.add_circle_outline_rounded,
                 label: 'Log Vitals',
-                color: context.colorScheme.primary,
+                gradient: AppColors.primaryGradient,
                 onTap: onLogVitals,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
-                icon: Icons.auto_awesome,
+                icon: Icons.auto_awesome_rounded,
                 label: 'Ask AI',
-                color: context.colorScheme.tertiary,
+                gradient: AppColors.aiGradient,
                 onTap: onAskAi,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
-                icon: Icons.show_chart,
+                icon: Icons.show_chart_rounded,
                 label: 'Trends',
-                color: Colors.teal,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+                ),
                 onTap: onViewCharts,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
-                icon: Icons.history,
+                icon: Icons.history_rounded,
                 label: 'History',
-                color: Colors.indigo,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF475569), Color(0xFF334155)],
+                ),
                 onTap: onViewHistory,
               ),
             ),
@@ -74,42 +80,70 @@ class DashboardQuickActions extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color color;
+  final LinearGradient gradient;
   final VoidCallback onTap;
 
   const _ActionButton({
     required this.icon,
     required this.label,
-    required this.color,
+    required this.gradient,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: context.textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
+    final isDark = context.isDarkMode;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        boxShadow: AppShadows.subtle(context),
+      ),
+      child: Material(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          splashColor: gradient.colors.first.withValues(alpha: 0.15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ],
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradient.colors.first.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_card.dart';
 
 class InviteCaregiverCard extends StatelessWidget {
   final TextEditingController controller;
@@ -12,27 +14,28 @@ class InviteCaregiverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextFormField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Caregiver Email Address',
-                prefixIcon: Icon(Icons.mail_outline),
-              ),
-              keyboardType: TextInputType.emailAddress,
+    return AppCard(
+      padding: const EdgeInsets.all(18.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: controller,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Caregiver Email Address',
+              hintText: 'caregiver@example.com',
+              prefixIcon: Icon(Icons.mail_outline_rounded),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: onSendInvite,
-              child: const Text('Send Invitation Link'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+          AppButton(
+            label: 'Send Access Invitation',
+            onPressed: onSendInvite,
+            icon: Icons.send_rounded,
+          ),
+        ],
       ),
     );
   }

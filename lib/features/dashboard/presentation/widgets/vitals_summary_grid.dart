@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 
 class VitalsSummaryGrid extends StatelessWidget {
   final Map<String, String> latestVitals;
@@ -23,46 +25,57 @@ class VitalsSummaryGrid extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Latest Health Vitals',
-              style: context.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                const Icon(Icons.favorite_outline_rounded, color: AppColors.bpVital, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Latest Health Vitals',
+                  style: context.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                  ),
+                ),
+              ],
             ),
             if (onAddVital != null)
               TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Log Vital'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                label: const Text('Log Vital', style: TextStyle(fontWeight: FontWeight.w700)),
                 onPressed: onAddVital,
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: _VitalTile(
-                icon: Icons.favorite,
-                iconColor: Colors.redAccent,
+                icon: Icons.favorite_rounded,
+                badgeColor: AppColors.bpVital,
                 label: 'Blood Pressure',
                 value: bp,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: _VitalTile(
-                icon: Icons.water_drop,
-                iconColor: Colors.orangeAccent,
+                icon: Icons.water_drop_rounded,
+                badgeColor: AppColors.glucoseVital,
                 label: 'Glucose',
                 value: glucose,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: _VitalTile(
-                icon: Icons.monitor_heart,
-                iconColor: Colors.purpleAccent,
-                label: 'Pulse',
+                icon: Icons.monitor_heart_rounded,
+                badgeColor: AppColors.pulseVital,
+                label: 'Pulse Rate',
                 value: pulse,
               ),
             ),
@@ -75,51 +88,66 @@ class VitalsSummaryGrid extends StatelessWidget {
 
 class _VitalTile extends StatelessWidget {
   final IconData icon;
-  final Color iconColor;
+  final Color badgeColor;
   final String label;
   final String value;
 
   const _VitalTile({
     required this.icon,
-    required this.iconColor,
+    required this.badgeColor,
     required this.label,
     required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: context.colorScheme.outlineVariant.withValues(alpha: 0.3),
-        ),
-      ),
+    final isDark = context.isDarkMode;
+
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      borderRadius: AppRadius.xl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: iconColor.withValues(alpha: 0.15),
-            child: Icon(icon, size: 16, color: iconColor),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(icon, color: badgeColor, size: 18),
+              ),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Text(
             label,
             style: context.textTheme.labelSmall?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             value,
-            style: context.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: context.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
           ),
         ],
       ),

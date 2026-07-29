@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/widgets/app_button.dart';
 
 class LoginForm extends StatefulWidget {
   final GlobalKey<FormState> formKey;
@@ -38,8 +39,10 @@ class _LoginFormState extends State<LoginForm> {
           TextFormField(
             controller: widget.emailController,
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
             decoration: const InputDecoration(
               labelText: 'Email Address',
+              hintText: 'name@example.com',
               prefixIcon: Icon(Icons.email_outlined),
             ),
             validator: (value) {
@@ -52,16 +55,20 @@ class _LoginFormState extends State<LoginForm> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           TextFormField(
             controller: widget.passwordController,
             obscureText: _obscurePassword,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => widget.onSubmit(),
             decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
+              hintText: '••••••••',
+              prefixIcon: const Icon(Icons.lock_outline_rounded),
               suffixIcon: IconButton(
                 icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 20,
                 ),
                 onPressed: () {
                   setState(() => _obscurePassword = !_obscurePassword);
@@ -79,32 +86,13 @@ class _LoginFormState extends State<LoginForm> {
             },
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
+          AppButton(
+            label: widget.isSignUp ? 'Create Account' : 'Sign In',
             onPressed: widget.isLoading ? null : widget.onSubmit,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: widget.isLoading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    widget.isSignUp ? 'Create Account' : 'Sign In',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+            isLoading: widget.isLoading,
+            icon: widget.isSignUp ? Icons.person_add_rounded : Icons.login_rounded,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           TextButton(
             onPressed: widget.onToggleMode,
             child: Text(
@@ -113,7 +101,8 @@ class _LoginFormState extends State<LoginForm> {
                   : 'Don\'t have an account? Sign Up',
               style: TextStyle(
                 color: context.colorScheme.primary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
               ),
             ),
           ),

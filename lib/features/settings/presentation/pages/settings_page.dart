@@ -2,6 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../bloc/settings_bloc.dart';
 import '../bloc/settings_event.dart';
 import '../bloc/settings_state.dart';
@@ -35,14 +38,55 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  void _confirmSignOut(BuildContext context) {
+    final isDark = context.isDarkMode;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xxl)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: AppColors.error, size: 24),
+            SizedBox(width: 10),
+            Text('Sign Out?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to sign out of your VitalAI account?',
+          style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthBloc>().add(AuthSignOutPressed());
+              context.go('/login');
+            },
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Settings')),
+          appBar: AppBar(title: const Text('Settings & Preferences')),
           body: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
             children: [
               // Patient Profile Card Context
               BlocBuilder<PatientBloc, PatientState>(
@@ -50,35 +94,59 @@ class _SettingsPageState extends State<SettingsPage> {
                   final active = patientState is PatientLoadSuccess
                       ? patientState.activePatient
                       : null;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 20),
+                  return AppCard(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text(
-                          active != null && active.name.isNotEmpty
-                              ? active.name[0].toUpperCase()
-                              : 'P',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppColors.primaryGradient,
+                        ),
+                        child: Center(
+                          child: Text(
+                            active != null && active.name.isNotEmpty
+                                ? active.name[0].toUpperCase()
+                                : 'P',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                            ),
                           ),
                         ),
                       ),
                       title: Text(
                         active != null ? active.name : 'No Active Patient',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                       ),
                       subtitle: Text(
                         active != null
-                            ? '${active.gender} • ${active.height.toInt()} cm'
-                            : 'Select patient profile',
+                            ? '${active.gender} • ${active.height.toInt()} cm • ${active.weight.toInt()} kg'
+                            : 'Tap to select active profile',
+                        style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
                       ),
-                      trailing: const Icon(Icons.swap_horiz),
+                      trailing: const Icon(Icons.swap_horiz_rounded, size: 22, color: AppColors.primary),
                       onTap: () => context.go('/patients'),
                     ),
                   );
                 },
+              ),
+
+              // Caregiver & Sharing Section
+              SettingsSection(
+                title: 'Sharing & Caregivers',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.person_2_fill,
+                    iconBg: AppColors.primary,
+                    title: 'Caregiver Portal',
+                    subtitle: 'Manage family access & remote emergency sharing',
+                    onTap: () => context.go('/caregiver'),
+                  ),
+                ],
               ),
 
               // Theme & Accessibility
@@ -88,7 +156,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   SettingTileItem(
                     icon: CupertinoIcons.color_filter,
                     iconBg: const Color(0xFF8A3FFC),
-                    title: 'Dark Mode Preference',
+                    title: 'Appearance Mode',
                     subtitle: state.themeMode == ThemeMode.dark
                         ? 'Dark Mode'
                         : state.themeMode == ThemeMode.light
@@ -110,9 +178,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: CupertinoIcons.eye,
                     iconBg: const Color(0xFF0F62FE),
                     title: 'High Contrast Mode',
-                    subtitle: 'Enhance text contrast and boundaries',
+                    subtitle: 'Enhance text legibility and outline boundaries',
                     trailing: CupertinoSwitch(
                       value: state.isHighContrast,
+                      activeTrackColor: AppColors.primary,
                       onChanged: (val) {
                         context.read<SettingsBloc>().add(
                               ThemeChanged(
@@ -126,13 +195,27 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
 
+              // App Experience
+              SettingsSection(
+                title: 'App Experience',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.compass_fill,
+                    iconBg: AppColors.tertiary,
+                    title: 'Replay Onboarding Tour',
+                    subtitle: 'View intro slides & feature walkthrough',
+                    onTap: () => context.go('/onboarding'),
+                  ),
+                ],
+              ),
+
               // Units Configuration
               SettingsSection(
                 title: 'Measurement Units',
                 children: [
                   SettingTileItem(
                     icon: CupertinoIcons.drop,
-                    iconBg: Colors.orange,
+                    iconBg: AppColors.glucoseVital,
                     title: 'Blood Glucose Unit',
                     subtitle: state.glucoseUnit,
                     onTap: () {
@@ -142,7 +225,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   SettingTileItem(
                     icon: CupertinoIcons.thermometer,
-                    iconBg: Colors.redAccent,
+                    iconBg: AppColors.tempVital,
                     title: 'Temperature Unit',
                     subtitle: '°${state.tempUnit}',
                     onTap: () {
@@ -152,7 +235,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   SettingTileItem(
                     icon: CupertinoIcons.speedometer,
-                    iconBg: Colors.green,
+                    iconBg: AppColors.weightVital,
                     title: 'Weight Unit',
                     subtitle: state.weightUnit,
                     onTap: () {
@@ -165,13 +248,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
               // AI Engine & API Keys
               SettingsSection(
-                title: 'AI Companion & API Key',
+                title: 'AI Companion & Engine',
                 children: [
                   SettingTileItem(
                     icon: CupertinoIcons.sparkles,
-                    iconBg: Colors.indigo,
+                    iconBg: AppColors.tertiary,
                     title: 'Gemini API Key',
-                    subtitle: state.apiKey.isNotEmpty ? 'Custom Key Set' : 'Default Key',
+                    subtitle: state.apiKey.isNotEmpty ? 'Custom Key Configured' : 'Default Key Active',
                     onTap: () => _openApiKeyDialog(context, state.apiKey),
                   ),
                 ],
@@ -179,17 +262,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
               // Account & Log Out
               SettingsSection(
-                title: 'Account & System',
+                title: 'Account & Security',
                 children: [
                   SettingTileItem(
-                    icon: Icons.logout,
-                    iconBg: Colors.red,
+                    icon: Icons.logout_rounded,
+                    iconBg: AppColors.error,
                     title: 'Sign Out',
-                    subtitle: 'Log out of VitalAI account',
-                    onTap: () {
-                      context.read<AuthBloc>().add(AuthSignOutPressed());
-                      context.go('/login');
-                    },
+                    subtitle: 'Log out of current session',
+                    onTap: () => _confirmSignOut(context),
                   ),
                 ],
               ),

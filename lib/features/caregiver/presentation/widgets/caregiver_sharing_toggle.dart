@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 
 class CaregiverSharingToggle extends StatelessWidget {
   final bool isSharingEnabled;
@@ -12,16 +15,36 @@ class CaregiverSharingToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: SwitchListTile(
-          title: const Text('Enable Remote Data Sharing'),
-          subtitle: const Text('Allow caregivers to access logs'),
-          value: isSharingEnabled,
-          secondary: const Icon(Icons.share_outlined),
-          onChanged: onChanged,
+    final isDark = context.isDarkMode;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SwitchListTile(
+        title: Text(
+          'Enable Remote Data Sharing',
+          style: context.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
         ),
+        subtitle: Text(
+          'Allow authorized caregivers to view vitals & receive alerts',
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+          ),
+        ),
+        value: isSharingEnabled,
+        activeTrackColor: AppColors.primary,
+        secondary: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.share_rounded, color: AppColors.primary, size: 22),
+        ),
+        onChanged: onChanged,
       ),
     );
   }

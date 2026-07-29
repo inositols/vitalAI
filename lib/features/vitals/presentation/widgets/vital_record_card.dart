@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../data/models/vital_record.dart';
 
 class VitalRecordCard extends StatelessWidget {
@@ -21,23 +22,23 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'BP: ${record.systolic!.toInt()}/${record.diastolic!.toInt()}',
         AppColors.bpVital,
-        Icons.favorite,
+        Icons.favorite_rounded,
       ));
     }
     if (record.glucoseValue != null) {
       badges.add(_buildBadge(
         context,
-        'Glucose: ${record.glucoseValue!.toInt()}',
+        'Glucose: ${record.glucoseValue!.toInt()} mg/dL',
         AppColors.glucoseVital,
-        Icons.water_drop,
+        Icons.water_drop_rounded,
       ));
     }
     if (record.pulseRate != null) {
       badges.add(_buildBadge(
         context,
-        'Pulse: ${record.pulseRate!.toInt()}',
+        'Pulse: ${record.pulseRate!.toInt()} bpm',
         AppColors.pulseVital,
-        Icons.monitor_heart,
+        Icons.monitor_heart_rounded,
       ));
     }
     if (record.oxygenSaturation != null) {
@@ -45,7 +46,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'SpO₂: ${record.oxygenSaturation!.toInt()}%',
         AppColors.spo2Vital,
-        Icons.air,
+        Icons.air_rounded,
       ));
     }
     if (record.bodyTemperature != null) {
@@ -53,7 +54,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Temp: ${record.bodyTemperature!.toStringAsFixed(1)}°C',
         AppColors.tempVital,
-        Icons.thermostat,
+        Icons.thermostat_rounded,
       ));
     }
     if (record.weight != null) {
@@ -61,7 +62,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Weight: ${record.weight!.toStringAsFixed(1)}kg',
         AppColors.weightVital,
-        Icons.scale,
+        Icons.scale_rounded,
       ));
     }
 
@@ -70,22 +71,22 @@ class VitalRecordCard extends StatelessWidget {
 
   Widget _buildBadge(BuildContext context, String text, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
           Text(
             text,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),
@@ -96,32 +97,30 @@ class VitalRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     final dt = record.dateTime;
     final formattedDate =
-        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} • ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
     final badges = _buildVitalBadges(context);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: context.colorScheme.outlineVariant.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14.0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: AppCard(
+        padding: const EdgeInsets.all(16.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: context.colorScheme.primaryContainer,
-              child: Icon(
-                Icons.analytics_outlined,
-                color: context.colorScheme.primary,
-                size: 20,
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.health_and_safety_rounded,
+                color: AppColors.primary,
+                size: 22,
               ),
             ),
             const SizedBox(width: 14),
@@ -131,31 +130,42 @@ class VitalRecordCard extends StatelessWidget {
                 children: [
                   Text(
                     formattedDate,
-                    style: context.textTheme.bodySmall?.copyWith(
-                      color: context.colorScheme.onSurfaceVariant,
+                    style: TextStyle(
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   if (badges.isEmpty)
                     Text(
                       'Empty Log Entry',
                       style: context.textTheme.bodyMedium?.copyWith(
                         fontStyle: FontStyle.italic,
+                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
                       ),
                     )
                   else
                     Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: badges,
                     ),
                   if (record.note != null && record.note!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Note: ${record.note}',
-                      style: context.textTheme.bodySmall?.copyWith(
-                        fontStyle: FontStyle.italic,
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Text(
+                        'Note: ${record.note}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
                       ),
                     ),
                   ],
@@ -163,7 +173,8 @@ class VitalRecordCard extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+              tooltip: 'Delete entry',
               onPressed: onDelete,
             ),
           ],

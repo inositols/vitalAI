@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../data/models/vital_record.dart';
 
 class HealthLineChart extends StatelessWidget {
@@ -16,56 +18,93 @@ class HealthLineChart extends StatelessWidget {
   String get chartTitle {
     switch (activeTab) {
       case 'bp':
-        return 'Blood Pressure History';
+        return 'Blood Pressure Trend';
       case 'glucose':
-        return 'Blood Glucose Trends';
+        return 'Blood Glucose Control';
       case 'pulse':
-        return 'Heart Rate (BPM)';
+        return 'Pulse Rate (BPM)';
       case 'temp':
         return 'Body Temperature';
       case 'weight':
-        return 'Weight Progress & BMI';
+        return 'Weight Progress';
       default:
         return 'Health Trends';
     }
   }
 
+  Color get activeColor {
+    switch (activeTab) {
+      case 'bp':
+        return AppColors.bpVital;
+      case 'glucose':
+        return AppColors.glucoseVital;
+      case 'pulse':
+        return AppColors.pulseVital;
+      case 'temp':
+        return AppColors.tempVital;
+      case 'weight':
+        return AppColors.weightVital;
+      default:
+        return AppColors.primary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final isDark = context.isDarkMode;
+
+    return AppCard(
       padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: context.colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: context.colorScheme.outline.withValues(alpha: 0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      borderRadius: AppRadius.xxl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            chartTitle,
-            style: context.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    chartTitle,
+                    style: context.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Real-time graphical metrics',
+                    style: context.textTheme.bodySmall?.copyWith(
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              if (activeTab == 'bp') ...[
+                Row(
+                  children: [
+                    _buildLegendItem('Sys', AppColors.bpVital),
+                    const SizedBox(width: 8),
+                    _buildLegendItem('Dia', AppColors.primary),
+                  ],
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
+            duration: AppDurations.normal,
             child: SizedBox(
               key: ValueKey<String>(activeTab),
               height: 260,
               child: records.isEmpty
-                  ? const Center(child: Text('No data recorded in this range.'))
+                  ? const Center(
+                      child: Text(
+                        'No vital entries recorded in this range.',
+                        style: TextStyle(color: Color(0xFF94A3B8)),
+                      ),
+                    )
                   : LineChart(_buildChartData(context)),
             ),
           ),
@@ -74,7 +113,25 @@ class HealthLineChart extends StatelessWidget {
     );
   }
 
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+
   LineChartData _buildChartData(BuildContext context) {
+    final isDark = context.isDarkMode;
     final List<FlSpot> spots1 = [];
     final List<FlSpot> spots2 = [];
 
@@ -97,14 +154,17 @@ class HealthLineChart extends StatelessWidget {
     }
 
     final isBp = activeTab == 'bp';
+    final primaryColor = activeColor;
+    final secondaryColor = AppColors.primary;
 
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
         getDrawingHorizontalLine: (val) => FlLine(
-          color: context.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
           strokeWidth: 1,
+          dashArray: [4, 4],
         ),
       ),
       titlesData: FlTitlesData(
@@ -113,7 +173,7 @@ class HealthLineChart extends StatelessWidget {
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 30,
+            reservedSize: 32,
             interval: (records.length / 5).clamp(1.0, 10.0),
             getTitlesWidget: (val, meta) {
               final idx = val.toInt();
@@ -123,9 +183,10 @@ class HealthLineChart extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     '${dt.month}/${dt.day}',
-                    style: context.textTheme.labelSmall?.copyWith(
-                      fontSize: 10,
-                      color: context.colorScheme.onSurfaceVariant,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   ),
                 );
@@ -140,27 +201,56 @@ class HealthLineChart extends StatelessWidget {
         LineChartBarData(
           spots: spots1.isEmpty ? [const FlSpot(0, 0)] : spots1,
           isCurved: true,
-          color: isBp ? Colors.redAccent : context.colorScheme.primary,
-          barWidth: 3,
+          color: primaryColor,
+          barWidth: 3.5,
           isStrokeCapRound: true,
-          dotData: const FlDotData(show: true),
+          dotData: FlDotData(
+            show: true,
+            getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+              radius: 4,
+              color: Colors.white,
+              strokeWidth: 3,
+              strokeColor: primaryColor,
+            ),
+          ),
           belowBarData: BarAreaData(
             show: true,
-            color: (isBp ? Colors.redAccent : context.colorScheme.primary)
-                .withValues(alpha: 0.1),
+            gradient: LinearGradient(
+              colors: [
+                primaryColor.withValues(alpha: 0.25),
+                primaryColor.withValues(alpha: 0.0),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
         ),
         if (isBp && spots2.isNotEmpty)
           LineChartBarData(
             spots: spots2,
             isCurved: true,
-            color: Colors.blueAccent,
-            barWidth: 3,
+            color: secondaryColor,
+            barWidth: 3.5,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: true),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 4,
+                color: Colors.white,
+                strokeWidth: 3,
+                strokeColor: secondaryColor,
+              ),
+            ),
             belowBarData: BarAreaData(
               show: true,
-              color: Colors.blueAccent.withValues(alpha: 0.08),
+              gradient: LinearGradient(
+                colors: [
+                  secondaryColor.withValues(alpha: 0.2),
+                  secondaryColor.withValues(alpha: 0.0),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
       ],

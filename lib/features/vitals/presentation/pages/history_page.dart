@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_shimmer.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../bloc/vitals_bloc.dart';
@@ -108,13 +111,41 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
 
-    return BlocBuilder<PatientBloc, PatientState>(
+    return BlocConsumer<PatientBloc, PatientState>(
+      listener: (context, state) {
+        if (state is PatientLoadSuccess && state.activePatient != null) {
+          _refresh();
+        }
+      },
       builder: (context, patientState) {
+        if (patientState is PatientLoading) {
+          return const Scaffold(
+            body: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    AppShimmer.card(height: 50),
+                    SizedBox(height: 12),
+                    AppShimmer.card(height: 100),
+                    SizedBox(height: 12),
+                    AppShimmer.card(height: 100),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         if (patientState is! PatientLoadSuccess || patientState.activePatient == null) {
           return const Scaffold(
-            body: Center(child: Text("Please select a patient profile first.")),
+            body: AppEmptyState(
+              icon: Icons.person_search_rounded,
+              title: 'No Active Patient Profile',
+              message: 'Please select a patient profile to view historical logs.',
+            ),
           );
         }
 
@@ -127,10 +158,23 @@ class _HistoryPageState extends State<HistoryPage> {
 
             return Scaffold(
               appBar: AppBar(
-                title: const Text('Log History'),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Vitals Log History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text(
+                      'Patient: ${patient.name}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.picture_as_pdf),
+                    icon: const Icon(Icons.picture_as_pdf_rounded),
                     tooltip: 'Export PDF Report',
                     onPressed: records.isEmpty
                         ? null
@@ -142,7 +186,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
                       child: HistoryFilterBar(
                         selectedVitalType: _vitalType,
                         startDate: _startDate,
@@ -162,15 +206,22 @@ class _HistoryPageState extends State<HistoryPage> {
                     ),
                     Expanded(
                       child: vitalsState is VitalsLoading
-                          ? const Center(child: CircularProgressIndicator())
+                          ? ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: 4,
+                              itemBuilder: (ctx, idx) => const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                                child: AppShimmer.card(height: 90),
+                              ),
+                            )
                           : records.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'No records found.',
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
+                              ? const AppEmptyState(
+                                  icon: Icons.history_rounded,
+                                  title: 'No Vitals Logged',
+                                  message: 'No recorded vitals fit the current filter criteria.',
                                 )
                               : ListView.builder(
+                                  padding: const EdgeInsets.only(bottom: 20),
                                   itemCount: records.length,
                                   itemBuilder: (ctx, index) {
                                     final r = records[index];

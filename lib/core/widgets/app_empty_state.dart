@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../extensions/build_context_ext.dart';
+import 'app_button.dart';
 
 class AppEmptyState extends StatelessWidget {
   final IconData icon;
@@ -19,38 +20,65 @@ class AppEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 64,
-              color: context.colorScheme.primary.withValues(alpha: 0.4),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    context.colorScheme.primary.withValues(alpha: 0.15),
+                    context.colorScheme.primary.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: context.colorScheme.primary.withValues(alpha: 0.1),
+                    blurRadius: 24,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: Icon(
+                icon,
+                size: 52,
+                color: context.colorScheme.primary,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               title,
-              style: context.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+              style: context.textTheme.headlineMedium?.copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               message,
-              style: context.textTheme.bodySmall?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                height: 1.45,
               ),
               textAlign: TextAlign.center,
             ),
             if (buttonText != null && onAction != null) ...[
-              const SizedBox(height: 20),
-              ElevatedButton(
+              const SizedBox(height: 28),
+              AppButton(
+                label: buttonText!,
                 onPressed: onAction,
-                child: Text(buttonText!),
+                icon: Icons.add_rounded,
               ),
             ],
           ],
