@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/patients/data/models/patient_model.dart';
 import '../../features/vitals/data/models/vital_record.dart';
 import '../../features/ai_assistant/data/models/chat_conversation.dart';
+import '../../features/reminders/data/models/reminder_model.dart';
 
 /// Service responsible for managing local key-value database using SharedPreferences.
 class DbService {
@@ -74,6 +75,24 @@ class DbService {
   /// Clear all conversations for a specific patient.
   Future<void> clearConversations(int patientId) async {
     await _prefs?.remove('ai_conversations_$patientId');
+  }
+
+  /// Retrieve all health reminders for a specific patient profile.
+  Future<List<ReminderModel>> getReminders(int patientId) async {
+    final raw = _prefs?.getString('reminders_$patientId');
+    if (raw == null) return [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list.map((item) => ReminderModel.fromJson(item as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Save all health reminders for a specific patient profile.
+  Future<void> saveReminders(int patientId, List<ReminderModel> reminders) async {
+    final raw = jsonEncode(reminders.map((r) => r.toJson()).toList());
+    await _prefs?.setString('reminders_$patientId', raw);
   }
 
   /// Clear database contents.

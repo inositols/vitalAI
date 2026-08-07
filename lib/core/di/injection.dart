@@ -17,6 +17,9 @@ import '../../features/ai_assistant/domain/repositories/ai_assistant_repository.
 import '../../features/ai_assistant/data/repositories/ai_assistant_repository_impl.dart';
 import '../../features/ai_assistant/domain/services/health_context_service.dart';
 import '../../features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
+import '../../features/reminders/domain/repositories/reminder_repository.dart';
+import '../../features/reminders/data/repositories/reminder_repository_impl.dart';
+import '../../features/reminders/presentation/bloc/reminders_bloc.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -100,6 +103,18 @@ Future<void> setupLocator() async {
     ),
   );
 
-  // 10. Initialize Database (After registering all module schemas)
+  // 10. Reminders Core
+  locator.registerLazySingleton<ReminderRepository>(
+    () => ReminderRepositoryImpl(
+      dbService: locator<DbService>(),
+      notificationService: locator<NotificationService>(),
+    ),
+  );
+
+  locator.registerFactory(
+    () => RemindersBloc(repository: locator<ReminderRepository>()),
+  );
+
+  // 11. Initialize Database (After registering all module schemas)
   await dbService.init();
 }

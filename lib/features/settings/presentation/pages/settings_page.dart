@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../bloc/settings_bloc.dart';
 import '../bloc/settings_event.dart';
@@ -84,7 +85,18 @@ class _SettingsPageState extends State<SettingsPage> {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Settings & Preferences')),
+          appBar: AppBar(
+            title: const Row(
+              children: [
+                AppBrandLogo(
+                  size: 28,
+                  iconSize: 14,
+                ),
+                SizedBox(width: 8),
+                Text('Settings & Preferences'),
+              ],
+            ),
+          ),
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
             children: [

@@ -163,15 +163,19 @@ class VitalsRepositoryImpl implements VitalsRepository {
   }
 
   bool _matchesType(VitalRecord r, String type) {
-    switch (type) {
+    switch (type.toLowerCase()) {
+      case 'bp':
       case 'blood_pressure':
         return r.systolic != null || r.diastolic != null;
       case 'glucose':
         return r.glucoseValue != null;
       case 'pulse':
+      case 'heart_rate':
         return r.pulseRate != null;
+      case 'spo2':
       case 'oxygen':
         return r.oxygenSaturation != null;
+      case 'temp':
       case 'temperature':
         return r.bodyTemperature != null;
       case 'weight':

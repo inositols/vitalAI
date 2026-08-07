@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/genui/genui_renderer.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_action_bar.dart';
@@ -126,18 +127,28 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SelectableText(
-                            message.content,
-                            style: context.textTheme.bodyMedium?.copyWith(
-                              color: isUser
-                                  ? Colors.white
-                                  : isFailed
-                                      ? AppColors.error
-                                      : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
-                              height: 1.5,
-                              fontSize: 15,
+                          if (!isUser && !isFailed)
+                            GenUiRenderer(
+                              content: message.content,
+                              textStyle: context.textTheme.bodyMedium?.copyWith(
+                                color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
+                                height: 1.5,
+                                fontSize: 15,
+                              ),
+                            )
+                          else
+                            SelectableText(
+                              message.content,
+                              style: context.textTheme.bodyMedium?.copyWith(
+                                color: isUser
+                                    ? Colors.white
+                                    : isFailed
+                                        ? AppColors.error
+                                        : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
+                                height: 1.5,
+                                fontSize: 15,
+                              ),
                             ),
-                          ),
                           const SizedBox(height: 6),
                           Row(
                             mainAxisSize: MainAxisSize.min,

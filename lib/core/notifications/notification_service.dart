@@ -14,7 +14,7 @@ class NotificationService {
     tz.initializeTimeZones();
     if (kIsWeb) return;
 
-    const androidSettings = AndroidInitializationSettings('app_icon');
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -30,6 +30,7 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+    await requestPermissions();
   }
 
   void _onNotificationTapped(NotificationResponse response) {
@@ -76,7 +77,7 @@ class NotificationService {
         importance: Importance.max,
         priority: Priority.high,
         playSound: true,
-        largeIcon: DrawableResourceAndroidBitmap('app_icon'),
+        largeIcon: DrawableResourceAndroidBitmap('ic_launcher'),
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
@@ -110,7 +111,7 @@ class NotificationService {
         channelDescription: 'Reminders for routine measurements',
         importance: Importance.high,
         priority: Priority.high,
-        largeIcon: DrawableResourceAndroidBitmap('app_icon'),
+        largeIcon: DrawableResourceAndroidBitmap('ic_launcher'),
       ),
       iOS: DarwinNotificationDetails(),
     );
@@ -173,7 +174,7 @@ class NotificationService {
         channelDescription: 'Scheduled daily measurements and activities',
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
-        largeIcon: DrawableResourceAndroidBitmap('app_icon'),
+        largeIcon: DrawableResourceAndroidBitmap('ic_launcher'),
       ),
       iOS: DarwinNotificationDetails(),
     );

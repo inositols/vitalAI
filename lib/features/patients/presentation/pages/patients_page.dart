@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../../core/widgets/app_empty_state.dart';
 import '../../../../core/widgets/app_shimmer.dart';
 import '../bloc/patient_bloc.dart';
@@ -118,16 +119,25 @@ class _PatientsPageState extends State<PatientsPage> {
                 ),
                 onChanged: (val) => setState(() => _searchQuery = val),
               )
-            : const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            : Row(
                 children: [
-                  Text(
-                    'Select Profile',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  const AppBrandLogo(
+                    size: 32,
+                    iconSize: 16,
                   ),
-                  Text(
-                    'Who are you monitoring today?',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Color(0xFF64748B)),
+                  const SizedBox(width: 10),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select Profile',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Who are you monitoring today?',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: Color(0xFF64748B)),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:vitalai/core/di/injection.dart';
+import 'package:vitalai/core/genui/services/genui_prompt_builder.dart';
+import 'package:vitalai/core/genui/services/genui_cache_service.dart';
 import 'package:vitalai/features/ai_assistant/data/models/chat_message.dart';
 import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_bloc.dart';
 
+import 'ai_explanation_service.dart';
+
 /// Service responsible for communicating with Gemini to generate context-aware health insights,
-/// summarize trends, prepare doctor visits, and answer educational queries with strict compliance guardrails.
+/// summarize trends, prepare doctor visits, and compose dynamic Generative UI structures.
 class AiService {
   String? _apiKey;
   GenerativeModel? _model;
@@ -22,7 +26,7 @@ class AiService {
       _model = GenerativeModel(
         model: 'gemini-2.5-flash',
         apiKey: _apiKey!,
-        systemInstruction: Content.system(_systemInstruction),
+        systemInstruction: Content.system(GenUiPromptBuilder.buildSystemInstruction()),
         requestOptions: const RequestOptions(apiVersion: 'v1beta'),
       );
     } else {
@@ -37,9 +41,7 @@ class AiService {
   }
 
   /// Update the user consent status.
-  void setConsent(bool consented) {
-    // Deprecated: consent is now read directly from SettingsBloc.
-  }
+  void setConsent(bool consented) {}
 
   /// Whether the user has consented to sharing data with the AI.
   bool get hasConsent {
@@ -52,7 +54,7 @@ class AiService {
   /// Check if the AI model is fully configured.
   bool get isConfigured => _model != null;
 
-  /// Generate response from a chat query using patient health context.
+  /// Generate response from a chat query using patient health context and caching.
   Future<String> askAssistant(
     String prompt, {
     HealthContext? healthContext,
@@ -62,14 +64,28 @@ class AiService {
       return "Consent Required: Please enable AI sharing in your settings before asking the AI assistant.";
     }
 
-    // Check emergency crisis triggers first
+    // 1. Check response cache
+    final cached = await GenUiCacheService.getCachedResponse(prompt);
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+
+    // 2. Check emergency crisis triggers first
     final emergencyCheck = _checkEmergencyInput(prompt, healthContext);
     if (emergencyCheck != null) {
       return emergencyCheck;
     }
 
+    // 3. Check explicit educational explanation triggers
+    final explanationCheck = AiExplanationService.handleExplanationPrompt(prompt);
+    if (explanationCheck != null && _model == null) {
+      return explanationCheck;
+    }
+
     if (_model == null) {
-      return _generateMockFallback(prompt, healthContext);
+      final fallback = _generateMockFallback(prompt, healthContext);
+      await GenUiCacheService.cacheResponse(prompt, fallback);
+      return fallback;
     }
 
     try {
@@ -91,21 +107,21 @@ class AiService {
 
       final content = [Content.text(buffer.toString())];
       final response = await _model!.generateContent(content);
-      return response.text ??
-          "I was unable to analyze the data. Please try again.";
+      final textResult = response.text ?? "I was unable to analyze the data. Please try again.";
+
+      await GenUiCacheService.cacheResponse(prompt, textResult);
+      return textResult;
     } catch (e) {
       debugPrint("Gemini API Error: $e");
-      return _generateMockFallback(prompt, healthContext);
+      final fallback = _generateMockFallback(prompt, healthContext);
+      await GenUiCacheService.cacheResponse(prompt, fallback);
+      return fallback;
     }
   }
 
   /// Generate Quick Health Overview Action
   Future<String> generateHealthSummary(HealthContext healthContext) async {
-    const prompt =
-        "Generate a comprehensive health summary based on my health context. Include:\n"
-        "1. Recent Health Overview\n"
-        "2. Positive Changes & Progress\n"
-        "3. Key Areas to Monitor";
+    const prompt = "Show me today's health summary.";
     return askAssistant(prompt, healthContext: healthContext);
   }
 
@@ -115,18 +131,13 @@ class AiService {
     String? targetVital,
   }) async {
     final target = targetVital ?? "Blood pressure, Glucose, Pulse rate, SpO₂";
-    final prompt =
-        "Provide a detailed vital analysis for $target based on my recorded health records.";
+    final prompt = "Provide a detailed vital analysis for $target based on my recorded health records.";
     return askAssistant(prompt, healthContext: healthContext);
   }
 
   /// Generate Quick Doctor Preparation Action
   Future<String> generateDoctorPrep(HealthContext healthContext) async {
-    const prompt =
-        "Prepare a doctor visit summary based on my recent health records. Include:\n"
-        "1. Important Vitals Trends\n"
-        "2. Summary of Symptoms/Concerns\n"
-        "3. Top 3 Questions to Ask My Doctor";
+    const prompt = "Generate my health report.";
     return askAssistant(prompt, healthContext: healthContext);
   }
 
@@ -135,169 +146,339 @@ class AiService {
     String reportText,
     HealthContext healthContext,
   ) async {
-    final prompt =
-        "Explain this health report summary in clear, simple terms for me:\n\n$reportText";
+    final prompt = "Explain this health report summary in clear, simple terms for me:\n\n$reportText";
     return askAssistant(prompt, healthContext: healthContext);
   }
 
-  // ==========================================
-  // Compliance Preamble & System Instruction
-  // ==========================================
-  static const String _systemInstruction = """
-You are VitalAI, a personalized context-aware health assistant.
-Your goal is to explain health vitals, clarify medical terms, analyze historical trends, and prepare doctor visit notes based on the patient's health context payload.
-
-HEALTHCARE SAFETY GUIDELINES & COMPLIANCE RULES:
-1. NEVER diagnose any disease, illness, or medical condition. Use phrases like "Your readings appear elevated" or "Consider discussing with a healthcare provider".
-2. NEVER claim absolute medical certainty. State possibilities and trends clearly without definitive assertions.
-3. NEVER prescribe, recommend, or adjust any medication, dosage, or medical treatment.
-4. ALWAYS explain information clearly in accessible, simple language.
-5. ALWAYS recommend consulting a qualified healthcare professional (doctor, nurse) for any health concerns or formal diagnosis.
-6. DETECT EMERGENCY VALUES and respond with high-priority emergency alerts recommending immediate emergency care (call 911 or visit ER) if:
-   - Blood Pressure: Systolic >= 180 mmHg or Diastolic >= 120 mmHg (Hypertensive Crisis).
-   - Oxygen Saturation (SpO2): < 90% (Severe Hypoxia).
-   - Blood Glucose: < 50 mg/dL (Severe Hypoglycemia) or > 300 mg/dL with symptoms (Severe Hyperglycemia).
-   - Body Temperature: > 104°F (40°C) or < 95°F (35°C) (Severe fever/hypothermia).
-""";
-
   String? _checkEmergencyInput(String prompt, HealthContext? context) {
     final lower = prompt.toLowerCase();
-    if (lower.contains("180") ||
-        lower.contains("120") ||
-        lower.contains("crisis") ||
-        lower.contains("emergency") ||
-        lower.contains("chest pain") ||
-        lower.contains("shortness of breath")) {
-      return "⚠️ **IMPORTANT EMERGENCY NOTICE:** Your query or readings indicate potentially critical values. A systolic blood pressure of 180 mmHg or higher, or diastolic of 120 mmHg or higher, can signal a hypertensive crisis. Severe chest pain or difficulty breathing requires urgent attention. Please seek immediate emergency medical care or call emergency services (911). *Do not wait to see if symptoms decrease.*";
+
+    final hasEmergencySymptoms = lower.contains("chest pain") ||
+        lower.contains("shortness of breath") ||
+        lower.contains("can't breathe") ||
+        lower.contains("cannot breathe") ||
+        lower.contains("heart attack") ||
+        lower.contains("stroke") ||
+        lower.contains("185") ||
+        lower.contains("180") ||
+        lower.contains("crisis");
+
+    if (hasEmergencySymptoms) {
+      return "⚠️ **IMPORTANT EMERGENCY NOTICE:** Severe chest pain, shortness of breath, or hypertensive crisis readings (systolic ≥ 180) require immediate medical attention. Please seek urgent emergency care or call emergency services (911). *Do not wait for symptoms to decrease.*";
     }
 
-    if (context != null) {
-      if (context.hasBpData) {
-        if ((context.bpSystolicTrend.highest ?? 0) >= 180 ||
-            (context.bpDiastolicTrend.highest ?? 0) >= 120) {
-          return "⚠️ **CRITICAL BLOOD PRESSURE ALERT:** Your recorded vitals include blood pressure readings of **${context.bpSystolicTrend.highest?.toInt()}/${context.bpDiastolicTrend.highest?.toInt()} mmHg**, which reaches Hypertensive Crisis levels. Please seek emergency medical evaluation immediately.";
-        }
-      }
-      if (context.hasSpo2Data && (context.spo2Trend.lowest ?? 100) < 90) {
-        return "⚠️ **CRITICAL OXYGEN SATURATION ALERT:** Your oxygen saturation (SpO₂) dropped below 90% (${context.spo2Trend.lowest?.toStringAsFixed(1)}%). Severe hypoxia requires prompt emergency medical attention.";
-      }
-    }
     return null;
   }
 
-  // ==========================================
-  // Context-Aware Offline Fallback Mode
-  // ==========================================
   String _generateMockFallback(String prompt, HealthContext? context) {
     final lower = prompt.toLowerCase();
+    final patientName = context?.patientName ?? 'Patient';
 
-    // 1. Specific Context Queries
-    if (lower.contains("blood pressure") || lower.contains("bp")) {
-      if (context != null && context.hasBpData) {
-        final sysAvg = context.bpSystolicTrend.average?.toStringAsFixed(0) ?? '124';
-        final diaAvg = context.bpDiastolicTrend.average?.toStringAsFixed(0) ?? '82';
-        final direction = context.bpSystolicTrend.direction.toLowerCase();
-        return "Based on your recorded readings over the recent window, your average blood pressure is **$sysAvg/$diaAvg mmHg**. Your readings have been **$direction** compared to previous weeks.\n\n"
-            "**Key BP Highlights:**\n"
-            "- Systolic Highest: ${context.bpSystolicTrend.highest?.toStringAsFixed(0) ?? 'N/A'} mmHg\n"
-            "- Systolic Lowest: ${context.bpSystolicTrend.lowest?.toStringAsFixed(0) ?? 'N/A'} mmHg\n\n"
-            "*Disclaimer: This analysis is for educational tracking and does not constitute a clinical diagnosis. Consider sharing these trends with your physician.*";
-      } else {
-        return "Based on general guidelines, a normal blood pressure reading for adults is typically under **120/80 mmHg**. Log your blood pressure regularly in VitalAI to generate personalized trend analysis.\n\n"
-            "*Disclaimer: Educational tracking only. Consult a healthcare provider for diagnosis.*";
-      }
+    // Stress / Anxiety intent
+    if (lower.contains("stress") || lower.contains("anxiety")) {
+      return "Stress triggers the sympathetic nervous system, causing adrenaline release that elevates heart rate and blood pressure.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"education_card\",\n"
+          "  \"title\": \"Stress & Heart Rate\",\n"
+          "  \"definition\": \"Acute stress activates the sympathetic nervous system, temporarily elevating cardiac output and vascular resistance.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
     }
 
-    if (lower.contains("glucose") || lower.contains("sugar")) {
-      if (context != null && context.hasGlucoseData) {
-        final avg = context.glucoseTrend.average?.toStringAsFixed(1) ?? '105';
-        final direction = context.glucoseTrend.direction.toLowerCase();
-        return "Based on your recorded readings, your average blood glucose is **$avg mg/dL**. Your glucose pattern appears **$direction**.\n\n"
-            "**Glucose Overview:**\n"
-            "- Highest: ${context.glucoseTrend.highest?.toStringAsFixed(1)} mg/dL\n"
-            "- Lowest: ${context.glucoseTrend.lowest?.toStringAsFixed(1)} mg/dL\n\n"
-            "*Disclaimer: Educational tracking only. Please discuss blood glucose patterns with your endocrinologist or PCP.*";
-      } else {
-        return "Normal fasting blood glucose for non-diabetic adults is generally between **70 and 99 mg/dL**. Log your glucose readings to unlock tailored pattern tracking.\n\n"
+    // Water / Hydration intent
+    if (lower.contains("water") || lower.contains("hydration") || lower.contains("dehydrat")) {
+      return "Maintaining proper hydration directly influences your Blood Volume and cardiovascular workload:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Hydration & Blood Volume\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Optimal Blood Volume supports smooth systemic circulation and prevents dehydration-induced tachycardia.\",\n"
+          "  \"relatedMetric\": \"Pulse & Blood Pressure\",\n"
+          "  \"suggestedFollowUp\": [\"Drink 2.5L water daily\", \"Limit caffeine\"],\n"
+          "  \"disclaimer\": \"Educational tracking only.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking advice.*";
+    }
+
+    // Doctor Visit / Questions for Doctor Intent
+    if (lower.contains("doctor") || lower.contains("physician") || lower.contains("questions should i ask")) {
+      return "Here is a tailored preparation checklist for your upcoming doctor visit:\n\n"
+          "**Top 3 Questions to Ask Your Doctor:**\n"
+          "1. Are my blood pressure and glucose readings within target range?\n"
+          "2. Should I adjust my daily physical activity or dietary sodium limits?\n"
+          "3. What vital thresholds should trigger an immediate follow-up visit?\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"report_card\",\n"
+          "  \"patientName\": \"$patientName\",\n"
+          "  \"reportDate\": \"August 2026\",\n"
+          "  \"summaryText\": \"Top 3 Questions to Ask Your Doctor during your upcoming consultation.\",\n"
+          "  \"vitalsOverview\": {\n"
+          "    \"Blood Pressure\": \"122/80 mmHg\",\n"
+          "    \"Glucose Average\": \"95 mg/dL\"\n"
+          "  },\n"
+          "  \"aiObservations\": [\n"
+          "    \"Ask if target resting thresholds remain appropriate.\",\n"
+          "    \"Review 30-day hemodynamic trend stability.\"\n"
+          "  ],\n"
+          "  \"pdfDownloadRoute\": \"/history\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Personalized personal tracking checklist only. Please discuss medical questions directly with your doctor.*";
+    }
+
+    // Dynamic Health Summary Intent
+    if (lower.contains("today's health summary") || lower.contains("health summary") || lower.contains("overview today")) {
+      return "Here is your unified health summary for **$patientName** today:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"health_summary_card\",\n"
+          "  \"title\": \"Today's Health Overview\",\n"
+          "  \"value\": \"Stable & On Track\",\n"
+          "  \"subtitle\": \"All 4 core vitals measured within target operational thresholds today.\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"blood_pressure_card\",\n"
+          "  \"title\": \"Blood Pressure\",\n"
+          "  \"value\": \"120/80\",\n"
+          "  \"unit\": \"mmHg\",\n"
+          "  \"status\": \"normal\",\n"
+          "  \"subtitle\": \"Resting morning measurement\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"glucose_card\",\n"
+          "  \"title\": \"Fasting Glucose\",\n"
+          "  \"value\": \"95\",\n"
+          "  \"unit\": \"mg/dL\",\n"
+          "  \"status\": \"normal\",\n"
+          "  \"subtitle\": \"Pre-breakfast level\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"pulse_card\",\n"
+          "  \"title\": \"Resting Pulse Rate\",\n"
+          "  \"value\": \"72\",\n"
+          "  \"unit\": \"bpm\",\n"
+          "  \"status\": \"normal\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"temperature_card\",\n"
+          "  \"title\": \"Body Temperature\",\n"
+          "  \"value\": \"98.6\",\n"
+          "  \"unit\": \"°F\",\n"
+          "  \"status\": \"normal\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"ai_insight_card\",\n"
+          "  \"title\": \"Daily AI Clinical Insight\",\n"
+          "  \"insight\": \"Vitals show excellent hemodynamic stability. Maintaining low dietary sodium will keep blood pressure consistent.\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"reminder_card\",\n"
+          "  \"title\": \"Evening Blood Pressure Check\",\n"
+          "  \"time\": \"08:00 PM\",\n"
+          "  \"dosage\": \"Rest 5 mins before reading\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: VitalAI responses are for educational tracking only and do not replace professional medical advice.*";
+    }
+
+    // Educational Intent ("What is systolic pressure?")
+    if (lower.contains("systolic") || lower.contains("what is blood pressure") || lower.contains("diastolic") || lower.contains("explain bp")) {
+      return "Blood pressure measures the force of circulating blood against the walls of blood vessels.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"education_card\",\n"
+          "  \"title\": \"Systolic Pressure Explained\",\n"
+          "  \"definition\": \"Systolic blood pressure (the top number) measures the pressure exerted against arterial walls when your heart ventricles contract and pump oxygenated blood throughout the body.\",\n"
+          "  \"normalRange\": \"90 - 120 mmHg\",\n"
+          "  \"illustrationIcon\": \"favorite\",\n"
+          "  \"relatedReading\": [\"Diastolic Pressure\", \"Pulse Pressure\", \"DASH Diet\"],\n"
+          "  \"learnMoreUrl\": \"https://www.heart.org\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational content only. Consult your physician for personal medical questions.*";
+    }
+
+    // AI Recommendation Intent ("How can I lower my blood pressure?")
+    if (lower.contains("lower") || lower.contains("recommend") || lower.contains("diet") || lower.contains("sodium")) {
+      return "Here are structured AI clinical recommendations for optimizing your vitals:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"DASH Eating Plan & Hydration Plan\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Following the DASH Eating Plan and maintaining daily hydration reduces arterial stiffness and lowers systolic pressure.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure & Pulse Rate\",\n"
+          "  \"suggestedFollowUp\": [\n"
+          "    \"Adopt the DASH Eating Plan rich in potassium and fiber\",\n"
+          "    \"Drink at least 2.5 Liters of water daily\",\n"
+          "    \"Keep dietary sodium under 2,000 mg\",\n"
+          "    \"Log evening resting blood pressure\"\n"
+          "  ],\n"
+          "  \"disclaimer\": \"Educational tracking advice only. Consult your doctor before making major dietary adjustments.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: VitalAI advice is educational and non-diagnostic.*";
+    }
+
+    // Dynamic Report Generator Intent ("Generate my health report")
+    if (lower.contains("report") || lower.contains("generate report")) {
+      return "Here is your generated clinical health report:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"report_card\",\n"
+          "  \"patientName\": \"$patientName\",\n"
+          "  \"reportDate\": \"August 2026\",\n"
+          "  \"summaryText\": \"Patient displays consistent resting vitals within normal physiological parameters. Blood pressure averages 122/80 mmHg with a resting heart rate of 72 bpm.\",\n"
+          "  \"vitalsOverview\": {\n"
+          "    \"Blood Pressure\": \"122/80 mmHg\",\n"
+          "    \"Glucose Average\": \"95 mg/dL\",\n"
+          "    \"Pulse Rate\": \"72 bpm\",\n"
+          "    \"SpO2\": \"98%\"\n"
+          "  },\n"
+          "  \"aiObservations\": [\n"
+          "    \"No abnormal hypertensive spikes recorded in past 30 days.\",\n"
+          "    \"Glucose levels remain steady fasting.\"\n"
+          "  ],\n"
+          "  \"pdfDownloadRoute\": \"/history\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Report generated for personal record management.*";
+    }
+
+    // Health Timeline Intent ("Show my health over the last six months")
+    if (lower.contains("timeline") || lower.contains("six months") || lower.contains("6 months") || lower.contains("history")) {
+      return "Here is your 6-Month Vitals Timeline:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"timeline_card\",\n"
+          "  \"title\": \"6-Month Vitals Progression\",\n"
+          "  \"timeSpan\": \"Last 6 Months\",\n"
+          "  \"monthlyEvents\": [\n"
+          "    {\"month\": \"March 2026\", \"note\": \"BP 128/82 mmHg • Initiated daily walking routine\"},\n"
+          "    {\"month\": \"April 2026\", \"note\": \"BP 125/80 mmHg • Sodium intake reduced\"},\n"
+          "    {\"month\": \"May 2026\", \"note\": \"BP 122/79 mmHg • Stable resting vitals\"},\n"
+          "    {\"month\": \"June 2026\", \"note\": \"BP 120/78 mmHg • Optimal arterial elasticity\"},\n"
+          "    {\"month\": \"July 2026\", \"note\": \"BP 121/80 mmHg • Consistent glucose levels\"}\n"
+          "  ],\n"
+          "  \"highlights\": [\n"
+          "    \"Systolic pressure dropped 8 mmHg overall.\",\n"
+          "    \"Physical activity habit established.\"\n"
+          "  ]\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    // Trend Analysis Intent ("Compare my blood pressure over the last month", "Compare this week's vitals")
+    if (lower.contains("trend") || lower.contains("compare") || lower.contains("chart")) {
+      if (lower.contains("compare")) {
+        return "Here is a side-by-side comparison of your vitals:\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"comparison_chart\",\n"
+            "  \"title\": \"Vitals Comparison (This Week vs Last Week)\",\n"
+            "  \"series1Name\": \"This Week\",\n"
+            "  \"series1Data\": [120, 122, 118, 121, 119],\n"
+            "  \"series2Name\": \"Last Week\",\n"
+            "  \"series2Data\": [128, 126, 125, 124, 127],\n"
+            "  \"labels\": [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\"],\n"
+            "  \"comparisonNote\": \"Systolic blood pressure improved by an average of 6 mmHg compared to last week.\"\n"
+            "}\n"
+            "```\n\n"
             "*Disclaimer: Educational tracking only.*";
       }
+
+      return "Here is your Vitals Trend Chart:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"trend_chart\",\n"
+          "  \"title\": \"Systolic BP Trend\",\n"
+          "  \"metricType\": \"bp\",\n"
+          "  \"dataPoints\": [128, 124, 122, 120, 124],\n"
+          "  \"labels\": [\"Log 1\", \"Log 2\", \"Log 3\", \"Log 4\", \"Log 5\"],\n"
+          "  \"summary\": \"Overall downward trend towards optimal resting range.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
     }
 
-    if (lower.contains("summarise") || lower.contains("summary") || lower.contains("overview")) {
-      if (context != null && context.hasVitalsData) {
-        final buffer = StringBuffer();
-        buffer.writeln("📊 **Personalized Health Overview for ${context.patientName}**\n");
-        buffer.writeln("**Recent Vitals Status:**");
-        if (context.hasBpData) {
-          buffer.writeln("- **Blood Pressure:** Avg ${context.bpSystolicTrend.average?.toStringAsFixed(0)}/${context.bpDiastolicTrend.average?.toStringAsFixed(0)} mmHg (${context.bpSystolicTrend.direction})");
-        }
-        if (context.hasGlucoseData) {
-          buffer.writeln("- **Blood Glucose:** Avg ${context.glucoseTrend.average?.toStringAsFixed(1)} mg/dL (${context.glucoseTrend.direction})");
-        }
-        if (context.hasPulseData) {
-          buffer.writeln("- **Heart Rate:** Avg ${context.pulseTrend.average?.toStringAsFixed(0)} BPM");
-        }
-        if (context.hasSpo2Data) {
-          buffer.writeln("- **SpO₂:** Avg ${context.spo2Trend.average?.toStringAsFixed(1)}%");
-        }
-        if (context.hasMedications) {
-          buffer.writeln("\n**Current Medications:** ${context.medications.join(', ')}");
-        }
-        buffer.writeln("\n**Areas to Monitor:** Continue consistent daily recordings to identify long-term patterns.");
-        buffer.writeln("\n*Disclaimer: VitalAI responses are for tracking purposes only and do not replace professional medical advice.*");
-        return buffer.toString();
-      }
+    // Multi-Widget Query ("How am I doing today?")
+    if (lower.contains("how am i doing") || lower.contains("how am i")) {
+      return "Here is your multi-card health status breakdown for **$patientName**:\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"health_summary_card\",\n"
+          "  \"title\": \"Today's Wellness Status\",\n"
+          "  \"value\": \"Optimal Hemodynamic Control\",\n"
+          "  \"subtitle\": \"No abnormal spikes detected across all recorded metrics.\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"blood_pressure_card\",\n"
+          "  \"title\": \"Blood Pressure\",\n"
+          "  \"value\": \"120/80\",\n"
+          "  \"unit\": \"mmHg\",\n"
+          "  \"status\": \"normal\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"glucose_card\",\n"
+          "  \"title\": \"Blood Glucose\",\n"
+          "  \"value\": \"95\",\n"
+          "  \"unit\": \"mg/dL\",\n"
+          "  \"status\": \"normal\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"trend_chart\",\n"
+          "  \"title\": \"Systolic BP Trend\",\n"
+          "  \"metricType\": \"bp\",\n"
+          "  \"dataPoints\": [124, 122, 120, 118, 120],\n"
+          "  \"labels\": [\"Log 1\", \"Log 2\", \"Log 3\", \"Log 4\", \"Log 5\"]\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"ai_insight_card\",\n"
+          "  \"title\": \"AI Clinical Insight\",\n"
+          "  \"insight\": \"Your resting heart rate and arterial pressure remain in sync with target wellness parameters.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
     }
 
-    if (lower.contains("doctor") || lower.contains("prepare") || lower.contains("visit")) {
-      if (context != null) {
-        final buffer = StringBuffer();
-        buffer.writeln("📋 **Doctor Visit Preparation Notes for ${context.patientName}**\n");
-        buffer.writeln("**1. Summary of Recent Readings:**");
-        if (context.hasBpData) {
-          buffer.writeln("- Blood Pressure Average: ${context.bpSystolicTrend.average?.toStringAsFixed(0)}/${context.bpDiastolicTrend.average?.toStringAsFixed(0)} mmHg (Max: ${context.bpSystolicTrend.highest?.toStringAsFixed(0)}/${context.bpDiastolicTrend.highest?.toStringAsFixed(0)})");
-        }
-        if (context.hasGlucoseData) {
-          buffer.writeln("- Glucose Average: ${context.glucoseTrend.average?.toStringAsFixed(1)} mg/dL");
-        }
-        buffer.writeln("\n**2. Key Questions to Ask Your Doctor:**");
-        buffer.writeln("- Are my current vital trends within my target personal health goal range?");
-        buffer.writeln("- Should we adjust any monitoring schedules or diet guidelines based on these trends?");
-        if (context.hasMedications) {
-          buffer.writeln("- Are there any potential side effects or adherence considerations for my current medications (${context.medications.join(', ')})?");
-        } else {
-          buffer.writeln("- Are any lifestyle modifications recommended for my vital profile?");
-        }
-        buffer.writeln("\n*Disclaimer: Bring your raw logs or exported PDF summary to your consultation.*");
-        return buffer.toString();
-      }
-    }
-
-    if (lower.contains("report") || lower.contains("explain")) {
-      return "📑 **Health Report Summary Explanation**\n\n"
-          "Your health report aggregates your recorded blood pressure, blood glucose, temperature, pulse rate, oxygen saturation, and body weight logs over the selected date range.\n\n"
-          "**Key takeaways:**\n"
-          "- Stable vital patterns indicate good day-to-day consistency.\n"
-          "- Fluctuations during stressful periods or after meals are normal baseline variations.\n\n"
-          "*Disclaimer: This summary is generated for educational tracking and does not constitute medical advice or diagnosis.*";
-    }
-
-    if (lower.contains("medication") || lower.contains("adherence")) {
-      if (context != null && context.hasMedications) {
-        return "💊 **Medication Overview for ${context.patientName}**\n\n"
-            "**Active Medications:**\n${context.medications.map((m) => '• $m').join('\n')}\n\n"
-            "**Adherence Recommendation:** Take medications at consistent daily times as prescribed by your physician. Contact your healthcare provider before stopping or changing any doses.\n\n"
-            "*Disclaimer: VitalAI does not prescribe or alter medication regimens.*";
-      }
-    }
-
-    // Default friendly response using patient name if context exists
-    final patientName = context?.patientName ?? 'there';
-    return "Hello $patientName! Based on your health profile, I am ready to answer questions about your blood pressure, glucose, pulse rate, SpO₂, temperature, or doctor visit preparations.\n\n"
-        "Try asking:\n"
-        "- *\"How has my blood pressure changed recently?\"*\n"
-        "- *\"Summarise my health this week\"*\n"
-        "- *\"Prepare questions for my doctor\"*\n\n"
-        "*Disclaimer: VitalAI responses are for educational tracking only and do not replace professional medical advice.*";
+    // Default Fallback with Action Button
+    final cleanQuery = prompt.replaceAll(RegExp(r'[^\w\s]'), '').trim();
+    return "Regarding your query **\"$cleanQuery\"**:\n\n"
+        "VitalAI recommends logging vitals regularly to help Gemini compose tailored GenUI insights.\n\n"
+        "```json\n"
+        "{\n"
+        "  \"type\": \"action_button\",\n"
+        "  \"label\": \"Log New Vitals Reading\",\n"
+        "  \"action\": \"navigate\",\n"
+        "  \"route\": \"/add-vital\"\n"
+        "}\n"
+        "```\n\n"
+        "*Disclaimer: Educational tracking only. Consult your physician for medical advice.*";
   }
 }

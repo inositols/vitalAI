@@ -37,6 +37,7 @@ class HistoryFilterBar extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String?>(
+                  isExpanded: true,
                   initialValue: selectedVitalType,
                   decoration: const InputDecoration(
                     labelText: 'Vital Category',

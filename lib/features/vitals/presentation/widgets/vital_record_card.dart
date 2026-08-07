@@ -22,7 +22,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'BP: ${record.systolic!.toInt()}/${record.diastolic!.toInt()}',
         AppColors.bpVital,
-        Icons.favorite_rounded,
+        AppIcons.bloodPressure,
       ));
     }
     if (record.glucoseValue != null) {
@@ -30,7 +30,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Glucose: ${record.glucoseValue!.toInt()} mg/dL',
         AppColors.glucoseVital,
-        Icons.water_drop_rounded,
+        AppIcons.glucose,
       ));
     }
     if (record.pulseRate != null) {
@@ -38,7 +38,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Pulse: ${record.pulseRate!.toInt()} bpm',
         AppColors.pulseVital,
-        Icons.monitor_heart_rounded,
+        AppIcons.pulse,
       ));
     }
     if (record.oxygenSaturation != null) {
@@ -46,7 +46,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'SpO₂: ${record.oxygenSaturation!.toInt()}%',
         AppColors.spo2Vital,
-        Icons.air_rounded,
+        AppIcons.spo2,
       ));
     }
     if (record.bodyTemperature != null) {
@@ -54,7 +54,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Temp: ${record.bodyTemperature!.toStringAsFixed(1)}°C',
         AppColors.tempVital,
-        Icons.thermostat_rounded,
+        AppIcons.temperature,
       ));
     }
     if (record.weight != null) {
@@ -62,7 +62,7 @@ class VitalRecordCard extends StatelessWidget {
         context,
         'Weight: ${record.weight!.toStringAsFixed(1)}kg',
         AppColors.weightVital,
-        Icons.scale_rounded,
+        AppIcons.weight,
       ));
     }
 

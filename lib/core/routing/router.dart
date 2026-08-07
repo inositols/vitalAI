@@ -13,6 +13,8 @@ import 'package:vitalai/features/onboarding/presentation/pages/splash_page.dart'
 import 'package:vitalai/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:vitalai/core/theme/design_tokens.dart';
 
+import 'package:vitalai/features/reminders/presentation/pages/reminders_page.dart';
+
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'root',
 );
@@ -42,6 +44,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/add-vital',
       builder: (context, state) => const AddVitalPage(),
+    ),
+    GoRoute(
+      path: '/reminders',
+      builder: (context, state) => const RemindersPage(),
     ),
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
@@ -105,23 +111,23 @@ class MainShellScaffold extends StatelessWidget {
 
     final destinations = const [
       NavigationDestination(
-        icon: Icon(Icons.grid_view_outlined),
-        selectedIcon: Icon(Icons.grid_view_rounded, color: AppColors.primary),
+        icon: Icon(AppIcons.dashboard),
+        selectedIcon: Icon(AppIcons.dashboard, color: AppColors.primary),
         label: 'Dashboard',
       ),
       NavigationDestination(
-        icon: Icon(Icons.auto_awesome_outlined),
-        selectedIcon: Icon(Icons.auto_awesome_rounded, color: AppColors.tertiary),
-        label: 'AI Companion',
+        icon: Icon(AppIcons.aiAssistant),
+        selectedIcon: Icon(AppIcons.aiAssistant, color: AppColors.tertiary),
+        label: 'Ask VitalAI',
       ),
       NavigationDestination(
-        icon: Icon(Icons.show_chart_outlined),
-        selectedIcon: Icon(Icons.show_chart_rounded, color: AppColors.primary),
+        icon: Icon(AppIcons.chart),
+        selectedIcon: Icon(AppIcons.chart, color: AppColors.primary),
         label: 'Analytics',
       ),
       NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
+        icon: Icon(AppIcons.settings),
+        selectedIcon: Icon(AppIcons.settings, color: AppColors.primary),
         label: 'Settings',
       ),
     ];

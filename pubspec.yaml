@@ -76,8 +76,9 @@ dependencies:
   # Helpers
   equatable: ^2.0.5
   uuid: ^4.4.0
-  device_preview: ^1.2.0
-
+  # Storybook Component Isolation
+  widgetbook: ^3.7.0
+  font_awesome_flutter: ^11.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

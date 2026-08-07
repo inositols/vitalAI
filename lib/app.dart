@@ -10,6 +10,7 @@ import 'features/patients/presentation/bloc/patient_bloc.dart';
 import 'features/settings/presentation/bloc/settings_bloc.dart';
 import 'features/settings/presentation/bloc/settings_state.dart';
 import 'features/vitals/presentation/bloc/vitals_bloc.dart';
+import 'features/reminders/presentation/bloc/reminders_bloc.dart';
 
 class VitalApp extends StatelessWidget {
   const VitalApp({super.key});
@@ -26,6 +27,9 @@ class VitalApp extends StatelessWidget {
         BlocProvider<VitalsBloc>(create: (context) => locator<VitalsBloc>()),
         BlocProvider<AiAssistantBloc>(
           create: (context) => locator<AiAssistantBloc>(),
+        ),
+        BlocProvider<RemindersBloc>(
+          create: (context) => locator<RemindersBloc>(),
         ),
       ],
       child: BlocBuilder<SettingsBloc, SettingsState>(

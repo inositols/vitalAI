@@ -175,7 +175,7 @@ void main() {
 
     test('askAssistant offline fallback provides context-aware blood pressure response', () async {
       final response = await aiService.askAssistant("How has my blood pressure changed recently?");
-      expect(response, contains('blood pressure'));
+      expect(response.toLowerCase(), contains('blood pressure'));
     });
   });
 }

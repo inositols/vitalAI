@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/theme/design_tokens.dart';
 import '../bloc/vitals_bloc.dart';
 import '../bloc/vitals_state.dart';
 import '../../../settings/presentation/bloc/settings_bloc.dart';
@@ -46,7 +47,7 @@ class VitalsMetricCard extends StatelessWidget {
           if (metricType == 'bp') {
             final bpRecords = records.where((r) => r.systolic != null && r.diastolic != null).toList();
             if (bpRecords.isEmpty) {
-              return _buildEmptyCard(theme, 'Blood Pressure', Icons.favorite_outline, 'No readings logged yet.');
+              return _buildEmptyCard(theme, 'Blood Pressure', AppIcons.bloodPressure, 'No readings logged yet.');
             }
             final latest = bpRecords.first;
             final systolic = latest.systolic!;
@@ -68,7 +69,7 @@ class VitalsMetricCard extends StatelessWidget {
               unit: 'mmHg',
               statusText: isAbnormal ? 'Abnormal' : 'Normal',
               statusColor: statusColor,
-              icon: Icons.favorite_outline,
+              icon: AppIcons.bloodPressure,
               iconColor: Colors.red,
               timeString: _formatDateTime(latest.dateTime),
               sparklinePoints: sparklinePoints,
@@ -76,7 +77,7 @@ class VitalsMetricCard extends StatelessWidget {
           } else {
             final glucoseRecords = records.where((r) => r.glucoseValue != null).toList();
             if (glucoseRecords.isEmpty) {
-              return _buildEmptyCard(theme, 'Blood Glucose', Icons.opacity, 'No readings logged yet.');
+              return _buildEmptyCard(theme, 'Blood Glucose', AppIcons.glucose, 'No readings logged yet.');
             }
             final latest = glucoseRecords.first;
             final glucose = latest.glucoseValue!;
@@ -101,7 +102,7 @@ class VitalsMetricCard extends StatelessWidget {
               unit: isMmol ? 'mmol/L' : 'mg/dL',
               statusText: '${isAbnormal ? 'Abnormal' : 'Normal'} (${mealContext[0].toUpperCase()}${mealContext.substring(1)})',
               statusColor: statusColor,
-              icon: Icons.opacity,
+              icon: AppIcons.glucose,
               iconColor: Colors.orange,
               timeString: _formatDateTime(latest.dateTime),
               sparklinePoints: sparklinePoints,

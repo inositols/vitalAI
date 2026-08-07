@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../../core/widgets/app_card.dart';
 
 class AiChatHeroHeader extends StatelessWidget {
@@ -57,20 +58,12 @@ class AiChatHeroHeader extends StatelessWidget {
           AppCard(
             gradient: AppColors.aiGradient,
             padding: const EdgeInsets.all(20),
-            boxShadow: AppShadows.aiGlow(context),
+            boxShadow: AppShadows.aiGlow,
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.white,
-                    size: 28,
-                  ),
+                const AppBrandLogo(
+                  size: 44,
+                  iconSize: 22,
                 ),
                 const SizedBox(width: 16),
                 Expanded(

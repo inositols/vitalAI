@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
 
@@ -85,37 +86,9 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
             const Spacer(),
             ScaleTransition(
               scale: _scaleAnim,
-              child: Container(
-                width: 104,
-                height: 104,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 32,
-                      spreadRadius: 4,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.2),
-                    width: 2,
-                  ),
-                ),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/vitalai_logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (ctx, err, stack) => const Icon(
-                      Icons.favorite_rounded,
-                      size: 52,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
+              child: const AppBrandLogo(
+                size: 104,
+                iconSize: 48,
               ),
             ),
             const SizedBox(height: 28),

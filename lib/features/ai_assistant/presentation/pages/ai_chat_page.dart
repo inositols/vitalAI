@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../../../settings/presentation/bloc/settings_bloc.dart';
@@ -151,14 +152,14 @@ class _AiChatPageState extends State<AiChatPage> {
               builder: (context, aiState) {
                 if (aiState is AiAssistantLoading || aiState is AiAssistantInitial) {
                   return Scaffold(
-                    appBar: AppBar(title: const Text('AI Health Companion')),
+                    appBar: AppBar(title: const Text('Ask VitalAI')),
                     body: const Center(child: CircularProgressIndicator()),
                   );
                 }
 
                 if (aiState is AiAssistantError) {
                   return Scaffold(
-                    appBar: AppBar(title: const Text('AI Health Companion')),
+                    appBar: AppBar(title: const Text('Ask VitalAI')),
                     body: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -190,13 +191,31 @@ class _AiChatPageState extends State<AiChatPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('AI Health Companion', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
+                            const AppBrandLogo(
+                              size: 24,
+                              iconSize: 12,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Ask VitalAI',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
                             SyncStatusBadge(status: loadedState.syncStatus),
                           ],
                         ),
-                        Text(activePatient != null ? 'Patient: ${activePatient.name}' : 'No Patient Selected', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        Text(
+                          activePatient != null ? 'Patient: ${activePatient.name}' : 'No Patient Selected',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
                       ],
                     ),
                     actions: [

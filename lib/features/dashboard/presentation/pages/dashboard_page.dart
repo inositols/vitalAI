@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../../../vitals/presentation/bloc/vitals_bloc.dart';
 import '../../../vitals/presentation/bloc/vitals_event.dart';
 import '../../../vitals/presentation/bloc/vitals_state.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/genui/genui_renderer.dart';
 import '../../../../core/notifications/notification_service.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_shimmer.dart';
 
 import '../widgets/dashboard_header.dart';
+import '../widgets/ai_insight_card.dart';
 import '../widgets/vitals_summary_grid.dart';
-import '../widgets/dashboard_quick_actions.dart';
 import '../widgets/today_reminders_card.dart';
+
+import '../../../reminders/presentation/bloc/reminders_bloc.dart';
+import '../../../reminders/presentation/bloc/reminders_event.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -28,17 +32,96 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _loadVitals();
+    _loadData();
     locator<NotificationService>().requestPermissions();
   }
 
-  void _loadVitals() {
+  void _loadData() {
     final patientState = context.read<PatientBloc>().state;
     if (patientState is PatientLoadSuccess && patientState.activePatient != null) {
-      context.read<VitalsBloc>().add(
-        VitalsListRequested(patientState.activePatient!.id),
-      );
+      final pid = patientState.activePatient!.id;
+      context.read<VitalsBloc>().add(VitalsListRequested(pid));
+      context.read<RemindersBloc>().add(RemindersListRequested(pid));
     }
+  }
+
+  String? _generateSmartGenUiContent(VitalsState state) {
+    if (state is! VitalsLoadSuccess || state.records.isEmpty) return null;
+
+    final latestBp = state.records.firstWhere((r) => r.systolic != null, orElse: () => state.records.first);
+    final latestGlucose = state.records.firstWhere((r) => r.glucoseValue != null, orElse: () => state.records.first);
+
+    // If blood pressure is elevated
+    if (latestBp.systolic != null && latestBp.systolic! >= 130) {
+      return '''
+Smart Focus: Elevated Blood Pressure Priority View
+
+```json
+{
+  "type": "blood_pressure_card",
+  "title": "Elevated Blood Pressure Focus",
+  "value": "${latestBp.systolic!.toInt()}/${latestBp.diastolic?.toInt() ?? 85}",
+  "unit": "mmHg",
+  "status": "elevated",
+  "subtitle": "Last reading is above target 120/80 mmHg"
+}
+```
+
+```json
+{
+  "type": "recommendation_card",
+  "title": "Hypertension Action Protocol",
+  "priority": "high",
+  "reason": "Elevated systolic pressure detected. Reducing daily sodium intake and engaging in light 20-minute aerobic walk daily supports vascular recovery.",
+  "relatedMetric": "Blood Pressure",
+  "suggestedFollowUp": [
+    "Log evening resting blood pressure",
+    "Limit sodium to under 2,000 mg today"
+  ],
+  "disclaimer": "Educational tracking recommendation only. Consult your physician."
+}
+```
+
+```json
+{
+  "type": "trend_chart",
+  "title": "Systolic BP 7-Day Pattern",
+  "metricType": "bp",
+  "dataPoints": [134, 132, 130, 135, ${latestBp.systolic!.toInt()}],
+  "labels": ["Day 1", "Day 2", "Day 3", "Day 4", "Today"]
+}
+```
+''';
+    }
+
+    // If glucose is abnormal
+    if (latestGlucose.glucoseValue != null && latestGlucose.glucoseValue! >= 120) {
+      return '''
+Smart Focus: Blood Glucose Priority View
+
+```json
+{
+  "type": "glucose_card",
+  "title": "Fasting Glucose Alert",
+  "value": "${latestGlucose.glucoseValue!.toInt()}",
+  "unit": "mg/dL",
+  "status": "warning",
+  "subtitle": "Fasting glucose elevated above 100 mg/dL target"
+}
+```
+
+```json
+{
+  "type": "education_card",
+  "title": "Post-Meal Glucose Management",
+  "definition": "A 10-minute light walk after meals uses muscle glycogen stores, lowering glucose spikes without extra insulin demand.",
+  "normalRange": "70 - 99 mg/dL (Fasting)"
+}
+```
+''';
+    }
+
+    return null;
   }
 
   @override
@@ -46,9 +129,9 @@ class _DashboardPageState extends State<DashboardPage> {
     return BlocListener<PatientBloc, PatientState>(
       listener: (context, state) {
         if (state is PatientLoadSuccess && state.activePatient != null) {
-          context.read<VitalsBloc>().add(
-            VitalsListRequested(state.activePatient!.id),
-          );
+          final pid = state.activePatient!.id;
+          context.read<VitalsBloc>().add(VitalsListRequested(pid));
+          context.read<RemindersBloc>().add(RemindersListRequested(pid));
         }
       },
       child: BlocBuilder<PatientBloc, PatientState>(
@@ -57,14 +140,14 @@ class _DashboardPageState extends State<DashboardPage> {
             return const Scaffold(
               body: SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.all(20.0),
+                  padding: EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      AppShimmer.card(height: 80),
+                      AppShimmer.card(height: 60),
+                      SizedBox(height: 16),
+                      AppShimmer.card(height: 120),
                       SizedBox(height: 16),
                       AppShimmer.card(height: 140),
-                      SizedBox(height: 16),
-                      AppShimmer.card(height: 180),
                     ],
                   ),
                 ),
@@ -77,151 +160,105 @@ class _DashboardPageState extends State<DashboardPage> {
 
             return Scaffold(
               appBar: AppBar(
+                titleSpacing: 16,
                 title: DashboardHeader(
                   patient: patient,
                   onSwitchPatient: () => context.go('/patients'),
                 ),
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.people_alt_outlined),
-                    tooltip: 'Switch Patient Profile',
-                    onPressed: () => context.go('/patients'),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: ElevatedButton.icon(
+                      onPressed: () => context.go('/add-vital'),
+                      icon: const Icon(AppIcons.add, size: 16),
+                      label: const Text('Log Vital', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
               body: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // AI Health Score & Insight Hero Card
-                      AppCard(
-                        gradient: AppColors.aiGradient,
-                        padding: const EdgeInsets.all(20),
-                        boxShadow: AppShadows.aiGlow(context),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0.0, end: 1.0),
+                  duration: AppMotion.normal,
+                  curve: AppMotion.easeInOutCubic,
+                  builder: (context, opacity, child) {
+                    return Opacity(
+                      opacity: opacity,
+                      child: child,
+                    );
+                  },
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. Executive AI Clinical Insight Banner
+                        AiInsightCard(
+                          onAskAi: () => context.go('/ai-chat'),
+                        ),
+                        const SizedBox(height: 18),
+
+                        // 2. Dynamic Smart GenUI Priority Section (if elevated readings detected)
+                        BlocBuilder<VitalsBloc, VitalsState>(
+                          builder: (context, vitalsState) {
+                            final genuiContent = _generateSmartGenUiContent(vitalsState);
+                            if (genuiContent != null) {
+                              return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.auto_awesome_rounded,
-                                          color: Colors.white,
-                                          size: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'AI Clinical Insight',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  const Text(
-                                    'Vitals are stable today',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Blood pressure and pulse show optimal trends over the last 7 days.',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.9),
-                                      fontSize: 13,
-                                      height: 1.35,
-                                    ),
-                                  ),
+                                  GenUiRenderer(content: genuiContent),
+                                  const SizedBox(height: 18),
                                 ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton(
-                              onPressed: () => context.go('/ai-chat'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: AppColors.tertiaryDark,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                                ),
-                              ),
-                              child: const Text('Consult', style: TextStyle(fontWeight: FontWeight.w800)),
-                            ),
-                          ],
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 24),
 
-                      // Latest Vitals Summary Grid
-                      BlocBuilder<VitalsBloc, VitalsState>(
-                        builder: (context, vitalsState) {
-                          Map<String, String> vitalsMap = {};
-                          if (vitalsState is VitalsLoadSuccess && vitalsState.records.isNotEmpty) {
-                            for (var v in vitalsState.records) {
-                              if (v.systolic != null && v.diastolic != null && !vitalsMap.containsKey('bp')) {
-                                vitalsMap['bp'] = '${v.systolic!.toInt()}/${v.diastolic!.toInt()}';
-                              }
-                              if (v.glucoseValue != null && !vitalsMap.containsKey('glucose')) {
-                                vitalsMap['glucose'] = '${v.glucoseValue!.toInt()} mg/dL';
-                              }
-                              if (v.pulseRate != null && !vitalsMap.containsKey('pulse')) {
-                                vitalsMap['pulse'] = '${v.pulseRate!.toInt()} bpm';
+                        // 3. Core Health Vitals Summary
+                        BlocBuilder<VitalsBloc, VitalsState>(
+                          builder: (context, vitalsState) {
+                            Map<String, String> vitalsMap = {};
+                            if (vitalsState is VitalsLoadSuccess && vitalsState.records.isNotEmpty) {
+                              for (var v in vitalsState.records) {
+                                if (v.systolic != null && v.diastolic != null && !vitalsMap.containsKey('bp')) {
+                                  vitalsMap['bp'] = '${v.systolic!.toInt()}/${v.diastolic!.toInt()} mmHg';
+                                }
+                                if (v.glucoseValue != null && !vitalsMap.containsKey('glucose')) {
+                                  vitalsMap['glucose'] = '${v.glucoseValue!.toInt()} mg/dL';
+                                }
+                                if (v.pulseRate != null && !vitalsMap.containsKey('pulse')) {
+                                  vitalsMap['pulse'] = '${v.pulseRate!.toInt()} bpm';
+                                }
                               }
                             }
-                          }
 
-                          return VitalsSummaryGrid(
-                            latestVitals: vitalsMap,
-                            onAddVital: () => context.go('/add-vital'),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
+                            return VitalsSummaryGrid(
+                              latestVitals: vitalsMap,
+                              onAddVital: () => context.go('/add-vital'),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 18),
 
-                      // Quick Actions Grid
-                      DashboardQuickActions(
-                        onLogVitals: () => context.go('/add-vital'),
-                        onAskAi: () => context.go('/ai-chat'),
-                        onViewCharts: () => context.go('/charts'),
-                        onViewHistory: () => context.go('/history'),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Reminders Overview Card
-                      TodayRemindersCard(
-                        onManageReminders: () => context.go('/settings'),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+                        // 4. Today's Reminders Card
+                        TodayRemindersCard(
+                          onManageReminders: () => context.go('/reminders'),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              floatingActionButton: FloatingActionButton.extended(
-                onPressed: () => context.go('/add-vital'),
-                icon: const Icon(Icons.add_rounded, color: Colors.white),
-                label: const Text('Record Vital', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                backgroundColor: AppColors.primary,
-                elevation: 6,
               ),
             );
           }
@@ -231,7 +268,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.account_circle_outlined, size: 64, color: AppColors.primary),
+                  const Icon(AppIcons.patients, size: 64, color: AppColors.primary),
                   const SizedBox(height: 16),
                   const Text('No Patient Profile Selected', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),

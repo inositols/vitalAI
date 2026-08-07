@@ -13,11 +13,11 @@ class VitalMetricSelector extends StatelessWidget {
   });
 
   static const _chips = [
-    {'id': 'bp', 'label': 'Blood Pressure', 'icon': Icons.favorite_rounded, 'color': AppColors.bpVital},
-    {'id': 'glucose', 'label': 'Glucose', 'icon': Icons.water_drop_rounded, 'color': AppColors.glucoseVital},
-    {'id': 'pulse', 'label': 'Pulse Rate', 'icon': Icons.monitor_heart_rounded, 'color': AppColors.pulseVital},
-    {'id': 'temp', 'label': 'Temperature', 'icon': Icons.device_thermostat_rounded, 'color': AppColors.tempVital},
-    {'id': 'weight', 'label': 'Weight', 'icon': Icons.scale_rounded, 'color': AppColors.weightVital},
+    {'id': 'bp', 'label': 'Blood Pressure', 'icon': AppIcons.bloodPressure, 'color': AppColors.bpVital},
+    {'id': 'glucose', 'label': 'Glucose', 'icon': AppIcons.glucose, 'color': AppColors.glucoseVital},
+    {'id': 'pulse', 'label': 'Pulse Rate', 'icon': AppIcons.pulse, 'color': AppColors.pulseVital},
+    {'id': 'temp', 'label': 'Temperature', 'icon': AppIcons.temperature, 'color': AppColors.tempVital},
+    {'id': 'weight', 'label': 'Weight', 'icon': AppIcons.weight, 'color': AppColors.weightVital},
   ];
 
   @override

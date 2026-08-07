@@ -35,7 +35,7 @@ void main() {
     );
 
     // Verify presence of branding text
-    expect(find.text('Your Secure Health Companion'), findsOneWidget);
+    expect(find.text('Welcome Back'), findsOneWidget);
 
     // Verify presence of standard Email/Password input forms
     expect(find.byType(TextFormField), findsNWidgets(2));

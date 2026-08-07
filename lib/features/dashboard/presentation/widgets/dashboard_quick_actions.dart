@@ -25,48 +25,41 @@ class DashboardQuickActions extends StatelessWidget {
           'Quick Actions',
           style: context.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
-            fontSize: 17,
+            fontSize: 16,
+            letterSpacing: -0.2,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
-              child: _ActionButton(
-                icon: Icons.add_circle_outline_rounded,
+              child: _ActionPill(
+                icon: AppIcons.add,
                 label: 'Log Vitals',
-                gradient: AppColors.primaryGradient,
                 onTap: onLogVitals,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              child: _ActionButton(
-                icon: Icons.auto_awesome_rounded,
+              child: _ActionPill(
+                icon: AppIcons.aiAssistant,
                 label: 'Ask AI',
-                gradient: AppColors.aiGradient,
                 onTap: onAskAi,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              child: _ActionButton(
-                icon: Icons.show_chart_rounded,
-                label: 'Trends',
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
-                ),
+              child: _ActionPill(
+                icon: AppIcons.chart,
+                label: 'Analytics',
                 onTap: onViewCharts,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              child: _ActionButton(
-                icon: Icons.history_rounded,
+              child: _ActionPill(
+                icon: AppIcons.history,
                 label: 'History',
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF475569), Color(0xFF334155)],
-                ),
                 onTap: onViewHistory,
               ),
             ),
@@ -77,16 +70,14 @@ class DashboardQuickActions extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
+class _ActionPill extends StatelessWidget {
   final IconData icon;
   final String label;
-  final LinearGradient gradient;
   final VoidCallback onTap;
 
-  const _ActionButton({
+  const _ActionPill({
     required this.icon,
     required this.label,
-    required this.gradient,
     required this.onTap,
   });
 
@@ -94,55 +85,38 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        boxShadow: AppShadows.subtle(context),
-      ),
-      child: Material(
-        color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          splashColor: gradient.colors.first.withValues(alpha: 0.15),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+    return Material(
+      color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : const Color(0xFFE2E8F0),
+              width: 0.8,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.primary, size: 18),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: context.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 10.5,
+                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: gradient,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: gradient.colors.first.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 20),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),

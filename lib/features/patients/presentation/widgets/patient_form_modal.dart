@@ -97,9 +97,8 @@ class _PatientFormModalState extends State<PatientFormModal> {
 
       final parsedAge = int.tryParse(_ageController.text.trim()) ?? 30;
       final now = DateTime.now();
-      // Adjust DOB based on entered age if user didn't pick date explicitly
-      p.dateOfBirth = DateTime(now.year - parsedAge, _dob.month, _dob.day);
 
+      p.dateOfBirth = DateTime(now.year - parsedAge, _dob.month, _dob.day);
       p.name = _nameController.text.trim();
       p.gender = _gender;
       p.height = double.tryParse(_heightController.text.trim()) ?? 170.0;
@@ -146,26 +145,7 @@ class _PatientFormModalState extends State<PatientFormModal> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                    ),
-                    child: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary, size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Text(
-                    widget.patient != null ? 'Edit Patient Profile' : 'Add New Patient Profile',
-                    style: context.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                    ),
-                  ),
-                ],
-              ),
+              _buildHeader(context),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _nameController,
@@ -175,85 +155,12 @@ class _PatientFormModalState extends State<PatientFormModal> {
                   hintText: 'e.g. Eleanor Vance',
                   prefixIcon: Icon(Icons.person_outline_rounded),
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'Name is required' : null,
+                validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _ageController,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Age (Years)',
-                        hintText: '35',
-                        prefixIcon: const Icon(Icons.cake_outlined),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
-                          tooltip: 'Pick Date of Birth',
-                          onPressed: _pickDateOfBirth,
-                        ),
-                      ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) return 'Age required';
-                        final num = int.tryParse(val.trim());
-                        if (num == null || num < 0 || num > 120) return 'Invalid age';
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _gender,
-                      decoration: const InputDecoration(
-                        labelText: 'Gender',
-                        prefixIcon: Icon(Icons.wc_rounded),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'Male', child: Text('Male')),
-                        DropdownMenuItem(value: 'Female', child: Text('Female')),
-                        DropdownMenuItem(value: 'Other', child: Text('Other')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _gender = val);
-                      },
-                    ),
-                  ),
-                ],
-              ),
+              _buildAgeAndGenderRow(),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _heightController,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Height (cm)',
-                        hintText: '170',
-                        prefixIcon: Icon(Icons.height_rounded),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _weightController,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Weight (kg)',
-                        hintText: '70',
-                        prefixIcon: Icon(Icons.monitor_weight_outlined),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              _buildHeightAndWeightRow(),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _contactController,
@@ -266,29 +173,123 @@ class _PatientFormModalState extends State<PatientFormModal> {
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Cancel',
-                      isOutlined: true,
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Save Profile',
-                      onPressed: _submit,
-                      icon: Icons.check_circle_outline_rounded,
-                    ),
-                  ),
-                ],
-              ),
+              _buildActionButtons(context),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          child: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Text(
+          widget.patient != null ? 'Edit Patient Profile' : 'Add New Patient Profile',
+          style: context.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAgeAndGenderRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _ageController,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Age (Years)',
+              hintText: '35',
+              prefixIcon: const Icon(Icons.cake_outlined),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                tooltip: 'Pick Date of Birth',
+                onPressed: _pickDateOfBirth,
+              ),
+            ),
+            validator: (val) {
+              if (val == null || val.trim().isEmpty) return 'Age required';
+              final num = int.tryParse(val.trim());
+              if (num == null || num < 0 || num > 120) return 'Invalid age';
+              return null;
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            isExpanded: true,
+            initialValue: _gender,
+            decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc_rounded)),
+            items: const [
+              DropdownMenuItem(value: 'Male', child: Text('Male', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Female', child: Text('Female', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Other', child: Text('Other', overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _gender = val);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeightAndWeightRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _heightController,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: 'Height (cm)', hintText: '170', prefixIcon: Icon(Icons.height_rounded)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            controller: _weightController,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: 'Weight (kg)', hintText: '70', prefixIcon: Icon(Icons.monitor_weight_outlined)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: AppButton(
+            label: 'Cancel',
+            isOutlined: true,
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: AppButton(
+            label: 'Save Profile',
+            onPressed: _submit,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        ),
+      ],
     );
   }
 }

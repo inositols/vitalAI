@@ -67,24 +67,36 @@ class VitalInputFields extends StatelessWidget {
                     controller: systolicController,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Systolic',
-                      prefixIcon: const Icon(Icons.favorite_rounded, color: AppColors.bpVital),
-                      suffixIcon: _buildUnitBadge(context, 'mmHg', AppColors.bpVital),
+                      prefixIcon: Icon(Icons.favorite_rounded, color: AppColors.bpVital, size: 20),
+                      suffixText: 'mmHg',
+                      suffixStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.bpVital,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                       hintText: '120',
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: TextFormField(
                     controller: diastolicController,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Diastolic',
-                      prefixIcon: const Icon(Icons.favorite_outline_rounded, color: AppColors.bpVital),
-                      suffixIcon: _buildUnitBadge(context, 'mmHg', AppColors.bpVital),
+                      prefixIcon: Icon(Icons.favorite_outline_rounded, color: AppColors.bpVital, size: 20),
+                      suffixText: 'mmHg',
+                      suffixStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.bpVital,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                       hintText: '80',
                     ),
                   ),
@@ -121,6 +133,7 @@ class VitalInputFields extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: glucoseMealContext,
               decoration: const InputDecoration(
                 labelText: 'Meal Context',

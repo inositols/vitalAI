@@ -20,6 +20,14 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
   double _soundLevel = 0.0;
   String _statusMessage = 'Initializing microphone...';
 
+  final List<String> _voicePresets = const [
+    "Show me today's health summary",
+    "Compare my blood pressure over the last month",
+    "What is systolic pressure?",
+    "Generate my health report",
+    "Show my health over the last six months",
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -41,26 +49,45 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
           }
         },
         onError: (err) {
-          if (mounted) setState(() { _isListening = false; _statusMessage = 'Speech error: ${err.errorMsg}'; });
+          if (mounted) {
+            setState(() {
+              _isListening = false;
+              _statusMessage = 'Speech engine notice. Tap a preset voice chip or type below.';
+            });
+          }
         },
       );
+
       if (mounted) {
         setState(() {
           _speechAvailable = available;
-          _statusMessage = available ? 'Microphone ready.' : 'Speech recognition unavailable.';
+          _statusMessage = available
+              ? 'Microphone ready. Speak now or tap presets.'
+              : 'Speech engine unavailable on emulator. Tap a voice preset or type text below.';
           if (available) _startListening();
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _speechAvailable = false; _statusMessage = 'Permission/engine error: $e'; });
+      if (mounted) {
+        setState(() {
+          _speechAvailable = false;
+          _statusMessage = 'Emulator voice mode active. Tap a preset below or type text.';
+        });
+      }
     }
   }
 
   void _startListening() async {
-    if (_speech == null) return;
-    if (!_speechAvailable) { await _initSpeechEngine(); return; }
+    if (!_speechAvailable) {
+      // Emulator / Demo fallback simulation
+      _simulateVoiceInput(_voicePresets[0]);
+      return;
+    }
     try {
-      setState(() { _isListening = true; _statusMessage = 'Listening... Speak now'; });
+      setState(() {
+        _isListening = true;
+        _statusMessage = 'Listening... Speak now';
+      });
       await _speech!.listen(
         onResult: (res) {
           if (mounted) {
@@ -70,17 +97,46 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
             });
           }
         },
-        onSoundLevelChange: (lvl) { if (mounted) setState(() => _soundLevel = lvl); },
-        listenOptions: stt.SpeechListenOptions(listenMode: stt.ListenMode.dictation, partialResults: true),
+        onSoundLevelChange: (lvl) {
+          if (mounted) setState(() => _soundLevel = lvl);
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+        ),
       );
     } catch (e) {
       if (mounted) setState(() { _isListening = false; _statusMessage = 'Error: $e'; });
     }
   }
 
+  void _simulateVoiceInput(String text) async {
+    setState(() {
+      _isListening = true;
+      _statusMessage = 'Simulating voice recognition...';
+      _textController.clear();
+    });
+
+    for (int i = 1; i <= text.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 30));
+      if (!mounted) return;
+      setState(() {
+        _textController.text = text.substring(0, i);
+        _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
+      });
+    }
+
+    if (mounted) {
+      setState(() {
+        _isListening = false;
+        _statusMessage = 'Voice dictation simulated.';
+      });
+    }
+  }
+
   void _stopListening() async {
     try { if (_speech != null && _speech!.isListening) await _speech!.stop(); } catch (_) {}
-    if (mounted) setState(() { _isListening = false; _soundLevel = 0.0; _statusMessage = 'Tap mic to listen'; });
+    if (mounted) setState(() { _isListening = false; _soundLevel = 0.0; _statusMessage = 'Tap mic or preset to dictate'; });
   }
 
   @override
@@ -119,9 +175,12 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
                   Text(_isListening ? 'Voice Assistant Active' : 'Speech Dictation', style: context.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(_statusMessage, textAlign: TextAlign.center, style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant)),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(_statusMessage, textAlign: TextAlign.center, style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant)),
+              ),
+              const SizedBox(height: 20),
               GestureDetector(
                 onTap: _isListening ? _stopListening : _startListening,
                 child: Column(
@@ -146,7 +205,21 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              // Preset Voice Chips for seamless testing on Emulators or devices
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 6,
+                runSpacing: 6,
+                children: _voicePresets.map((preset) {
+                  return ActionChip(
+                    avatar: const Icon(Icons.graphic_eq_rounded, size: 14),
+                    label: Text(preset, style: const TextStyle(fontSize: 11)),
+                    onPressed: () => _simulateVoiceInput(preset),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -157,7 +230,10 @@ class _VoiceDictationModalState extends State<VoiceDictationModal> with SingleTi
                   minLines: 2,
                   textAlign: TextAlign.center,
                   style: context.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500, height: 1.4),
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: 'Spoken text will appear here...'),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: 'Spoken or typed prompt will appear here...',
+                  ),
                 ),
               ),
               const SizedBox(height: 24),

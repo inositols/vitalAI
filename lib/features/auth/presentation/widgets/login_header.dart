@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 
 class LoginHeader extends StatelessWidget {
   final Animation<double> logoAnimation;
@@ -22,39 +23,9 @@ class LoginHeader extends StatelessWidget {
       children: [
         ScaleTransition(
           scale: logoAnimation,
-          child: Container(
-            width: 88,
-            height: 88,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.25),
-                  blurRadius: 24,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                width: 1.5,
-              ),
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                'assets/images/vitalai_logo.png',
-                fit: BoxFit.contain,
-                errorBuilder: (ctx, err, stack) {
-                  return const Icon(
-                    Icons.favorite_rounded,
-                    size: 44,
-                    color: AppColors.primary,
-                  );
-                },
-              ),
-            ),
+          child: const AppBrandLogo(
+            size: 88,
+            iconSize: 40,
           ),
         ),
         const SizedBox(height: 24),

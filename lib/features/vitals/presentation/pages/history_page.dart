@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
 import '../../../../core/widgets/app_empty_state.dart';
 import '../../../../core/widgets/app_shimmer.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
@@ -158,16 +159,29 @@ class _HistoryPageState extends State<HistoryPage> {
 
             return Scaffold(
               appBar: AppBar(
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                title: Row(
                   children: [
-                    const Text('Vitals Log History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                    Text(
-                      'Patient: ${patient.name}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    const AppBrandLogo(
+                      size: 28,
+                      iconSize: 14,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Vitals Log History', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                            'Patient: ${patient.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
