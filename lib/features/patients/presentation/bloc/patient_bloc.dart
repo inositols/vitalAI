@@ -8,9 +8,8 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
   final PatientRepository _patientRepository;
   PatientModel? _activePatient;
 
-  PatientBloc({required PatientRepository patientRepository})
-      : _patientRepository = patientRepository,
-        super(PatientInitial()) {
+  PatientBloc({required this._patientRepository})
+      : super(PatientInitial()) {
     on<PatientListRequested>(_onPatientListRequested);
     on<PatientSelected>(_onPatientSelected);
     on<PatientSaved>(_onPatientSaved);

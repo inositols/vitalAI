@@ -163,15 +163,19 @@ class VitalsRepositoryImpl implements VitalsRepository {
   }
 
   bool _matchesType(VitalRecord r, String type) {
-    switch (type) {
+    switch (type.toLowerCase()) {
+      case 'bp':
       case 'blood_pressure':
         return r.systolic != null || r.diastolic != null;
       case 'glucose':
         return r.glucoseValue != null;
       case 'pulse':
+      case 'heart_rate':
         return r.pulseRate != null;
+      case 'spo2':
       case 'oxygen':
         return r.oxygenSaturation != null;
+      case 'temp':
       case 'temperature':
         return r.bodyTemperature != null;
       case 'weight':
@@ -182,14 +186,17 @@ class VitalsRepositoryImpl implements VitalsRepository {
   }
 
   bool _isAbnormal(VitalRecord r) {
-    if (r.systolic != null && (r.systolic! >= 130 || r.systolic! < 90))
+    if (r.systolic != null && (r.systolic! >= 130 || r.systolic! < 90)) {
       return true;
-    if (r.diastolic != null && (r.diastolic! >= 85 || r.diastolic! < 60))
+    }
+    if (r.diastolic != null && (r.diastolic! >= 85 || r.diastolic! < 60)) {
       return true;
+    }
     if (r.oxygenSaturation != null && r.oxygenSaturation! < 95) return true;
     if (r.glucoseValue != null &&
-        (r.glucoseValue! >= 140 || r.glucoseValue! < 70))
+        (r.glucoseValue! >= 140 || r.glucoseValue! < 70)) {
       return true;
+    }
     return false;
   }
 }

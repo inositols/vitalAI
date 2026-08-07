@@ -1,7 +1,7 @@
+import 'package:uuid/uuid.dart';
+
 /// PatientModel represents the patient profile data structure.
 class PatientModel {
-  PatientModel();
-
   /// Local database ID.
   int id = 0;
 
@@ -50,6 +50,18 @@ class PatientModel {
   /// Local timestamp when the record was last modified.
   late DateTime updatedAt;
 
+  PatientModel() {
+    remoteId = const Uuid().v4();
+    name = '';
+    gender = 'Male';
+    dateOfBirth = DateTime.now().subtract(const Duration(days: 365 * 30));
+    height = 170.0;
+    weight = 70.0;
+    emergencyContact = '';
+    isSynced = false;
+    updatedAt = DateTime.now();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -73,22 +85,25 @@ class PatientModel {
 
   factory PatientModel.fromJson(Map<String, dynamic> json) {
     return PatientModel()
-      ..id = json['id'] as int
-      ..remoteId = json['remoteId'] as String
-      ..name = json['name'] as String
-      ..gender = json['gender'] as String
-      ..dateOfBirth = DateTime.parse(json['dateOfBirth'] as String)
-      ..height = (json['height'] as num).toDouble()
-      ..weight = (json['weight'] as num).toDouble()
-      ..emergencyContact = json['emergencyContact'] as String
+      ..id = json['id'] as int? ?? 0
+      ..remoteId = json['remoteId'] as String? ?? const Uuid().v4()
+      ..name = json['name'] as String? ?? ''
+      ..gender = json['gender'] as String? ?? 'Male'
+      ..dateOfBirth = json['dateOfBirth'] != null
+          ? DateTime.parse(json['dateOfBirth'] as String)
+          : DateTime.now().subtract(const Duration(days: 365 * 30))
+      ..height = ((json['height'] ?? 170.0) as num).toDouble()
+      ..weight = ((json['weight'] ?? 70.0) as num).toDouble()
+      ..emergencyContact = json['emergencyContact'] as String? ?? ''
       ..medicalConditions = List<String>.from(json['medicalConditions'] ?? [])
       ..allergies = List<String>.from(json['allergies'] ?? [])
       ..medications = List<String>.from(json['medications'] ?? [])
       ..doctorName = json['doctorName'] as String?
       ..doctorPhone = json['doctorPhone'] as String?
       ..notes = json['notes'] as String?
-      ..isSynced = json['isSynced'] as bool
-      ..updatedAt = DateTime.parse(json['updatedAt'] as String);
+      ..isSynced = json['isSynced'] as bool? ?? false
+      ..updatedAt = json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : DateTime.now();
   }
 }
-

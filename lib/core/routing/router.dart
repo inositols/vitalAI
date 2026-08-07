@@ -1,204 +1,152 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../plugin/module_registry.dart';
-import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/patients/presentation/pages/patients_page.dart';
-import '../../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../../features/vitals/presentation/pages/history_page.dart';
-import '../../features/vitals/presentation/pages/add_vital_page.dart';
-import '../../features/vitals/presentation/pages/charts_page.dart';
-import '../../features/ai_assistant/presentation/pages/ai_chat_page.dart';
-import '../../features/settings/presentation/pages/settings_page.dart';
-import '../../features/caregiver/presentation/pages/caregiver_page.dart';
+import 'package:vitalai/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:vitalai/features/ai_assistant/presentation/pages/ai_chat_page.dart';
+import 'package:vitalai/features/vitals/presentation/pages/charts_page.dart';
+import 'package:vitalai/features/vitals/presentation/pages/history_page.dart';
+import 'package:vitalai/features/settings/presentation/pages/settings_page.dart';
+import 'package:vitalai/features/vitals/presentation/pages/add_vital_page.dart';
+import 'package:vitalai/features/patients/presentation/pages/patients_page.dart';
+import 'package:vitalai/features/caregiver/presentation/pages/caregiver_page.dart';
+import 'package:vitalai/features/auth/presentation/pages/login_page.dart';
+import 'package:vitalai/features/onboarding/presentation/pages/splash_page.dart';
+import 'package:vitalai/features/onboarding/presentation/pages/onboarding_page.dart';
+import 'package:vitalai/core/theme/design_tokens.dart';
 
-// Global keys for navigation context
-final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> shellNavigatorKey = GlobalKey<NavigatorState>();
+import 'package:vitalai/features/reminders/presentation/pages/reminders_page.dart';
 
-/// Configuration class for the app's GoRouter instance.
-/// Automatically mounts paths for core features and dynamically attaches module routes.
-class AppRouter {
-  static final GoRouter router = GoRouter(
-    navigatorKey: rootNavigatorKey,
-    initialLocation: '/login',
-    routes: [
-      GoRoute(
-        path: '/login',
-        pageBuilder: (context, state) => _buildPageTransition(
-          state: state,
-          child: const LoginPage(),
-          slideUp: false,
-        ),
-      ),
-      GoRoute(
-        path: '/patients',
-        pageBuilder: (context, state) => _buildPageTransition(
-          state: state,
-          child: const PatientsPage(),
-          slideUp: false,
-        ),
-      ),
-      GoRoute(
-        path: '/vitals/add',
-        pageBuilder: (context, state) => _buildPageTransition(
-          state: state,
-          child: const AddVitalPage(),
-          slideUp: true,
-        ),
-      ),
-      ShellRoute(
-        navigatorKey: shellNavigatorKey,
-        builder: (context, state, child) => _ShellScaffold(child: child),
-        routes: [
-          GoRoute(
-            path: '/',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const DashboardPage(),
-              slideUp: true,
-            ),
-          ),
-          GoRoute(
-            path: '/history',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const HistoryPage(),
-              slideUp: true,
-            ),
-          ),
-          GoRoute(
-            path: '/charts',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const ChartsPage(),
-              slideUp: true,
-            ),
-          ),
-          GoRoute(
-            path: '/ai-chat',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const AiChatPage(),
-              slideUp: true,
-            ),
-          ),
-          GoRoute(
-            path: '/caregiver',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const CaregiverPage(),
-              slideUp: true,
-            ),
-          ),
-          GoRoute(
-            path: '/settings',
-            pageBuilder: (context, state) => _buildPageTransition(
-              state: state,
-              child: const SettingsPage(),
-              slideUp: true,
-            ),
-          ),
-          // Dynamically mount routes registered by other plugin modules
-          ...ModuleRegistry.instance.allRoutes,
-        ],
-      ),
-    ],
-  );
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'root',
+);
+final GlobalKey<NavigatorState> _shellNavigatorKey =
+    GlobalKey<NavigatorState>(debugLabel: 'shell');
 
-  static GoRouter buildRouter(BuildContext context) => router;
-
-  static Page<dynamic> _buildPageTransition({
-    required GoRouterState state,
-    required Widget child,
-    required bool slideUp,
-  }) {
-    return CustomTransitionPage<void>(
-      key: state.pageKey,
-      child: child,
-      transitionDuration: const Duration(milliseconds: 350),
-      reverseTransitionDuration: const Duration(milliseconds: 250),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        if (slideUp) {
-          // Premium slide up & fade
-          final slideTween = Tween<Offset>(
-            begin: const Offset(0.0, 0.06),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: Curves.easeOutCubic));
-
-          return SlideTransition(
-            position: animation.drive(slideTween),
-            child: FadeTransition(
-              opacity: CurveTween(curve: Curves.easeIn).animate(animation),
-              child: child,
-            ),
-          );
-        } else {
-          // Premium subtle scale-fade for main context switches
-          final scaleTween = Tween<double>(
-            begin: 0.96,
-            end: 1.0,
-          ).chain(CurveTween(curve: Curves.easeOutCubic));
-
-          return ScaleTransition(
-            scale: animation.drive(scaleTween),
-            child: FadeTransition(
-              opacity: CurveTween(curve: Curves.easeIn).animate(animation),
-              child: child,
-            ),
-          );
-        }
+final GoRouter appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
+  initialLocation: '/splash',
+  routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingPage(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      path: '/patients',
+      builder: (context, state) => const PatientsPage(),
+    ),
+    GoRoute(
+      path: '/add-vital',
+      builder: (context, state) => const AddVitalPage(),
+    ),
+    GoRoute(
+      path: '/reminders',
+      builder: (context, state) => const RemindersPage(),
+    ),
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) {
+        return MainShellScaffold(child: child);
       },
-    );
-  }
+      routes: [
+        GoRoute(
+          path: '/',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: DashboardPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/charts',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: ChartsPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/history',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: HistoryPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/ai-chat',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: AiChatPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/caregiver',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: CaregiverPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/settings',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: SettingsPage(),
+          ),
+        ),
+      ],
+    ),
+  ],
+);
+
+class AppRouter {
+  static GoRouter get router => appRouter;
 }
 
-/// Simple shell layout incorporating navigation bar with large touch targets.
-class _ShellScaffold extends StatelessWidget {
+class MainShellScaffold extends StatelessWidget {
   final Widget child;
-  const _ShellScaffold({required this.child});
+  const MainShellScaffold({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    final GoRouterState state = GoRouterState.of(context);
-    final String currentLoc = state.uri.path;
+    final String currentLoc = GoRouterState.of(context).uri.path;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Map navigation destinations
-    final destinations = [
-      const NavigationDestination(
-        icon: Icon(CupertinoIcons.square_grid_2x2, size: 26),
-        selectedIcon: Icon(CupertinoIcons.square_grid_2x2_fill, size: 26),
+    final destinations = const [
+      NavigationDestination(
+        icon: Icon(AppIcons.dashboard),
+        selectedIcon: Icon(AppIcons.dashboard, color: AppColors.primary),
         label: 'Dashboard',
       ),
-      const NavigationDestination(
-        icon: Icon(CupertinoIcons.clock, size: 26),
-        selectedIcon: Icon(CupertinoIcons.clock_fill, size: 26),
-        label: 'History',
+      NavigationDestination(
+        icon: Icon(AppIcons.aiAssistant),
+        selectedIcon: Icon(AppIcons.aiAssistant, color: AppColors.tertiary),
+        label: 'Ask VitalAI',
       ),
-      const NavigationDestination(
-        icon: Icon(CupertinoIcons.waveform_path_ecg, size: 26),
-        selectedIcon: Icon(CupertinoIcons.waveform_path_ecg, size: 26),
-        label: 'Charts',
+      NavigationDestination(
+        icon: Icon(AppIcons.chart),
+        selectedIcon: Icon(AppIcons.chart, color: AppColors.primary),
+        label: 'Analytics',
       ),
-      const NavigationDestination(
-        icon: Icon(CupertinoIcons.sparkles, size: 26),
-        selectedIcon: Icon(CupertinoIcons.sparkles, size: 26),
-        label: 'AI Chat',
-      ),
-      const NavigationDestination(
-        icon: Icon(CupertinoIcons.gear_alt, size: 26),
-        selectedIcon: Icon(CupertinoIcons.gear_alt_fill, size: 26),
+      NavigationDestination(
+        icon: Icon(AppIcons.settings),
+        selectedIcon: Icon(AppIcons.settings, color: AppColors.primary),
         label: 'Settings',
       ),
     ];
 
     int getSelectedIndex() {
-      if (currentLoc == '/') return 0;
-      if (currentLoc.startsWith('/history')) return 1;
-      if (currentLoc.startsWith('/charts')) return 2;
-      if (currentLoc.startsWith('/ai-chat')) return 3;
-      if (currentLoc.startsWith('/settings')) return 4;
-      return 0;
+      switch (currentLoc) {
+        case '/':
+          return 0;
+        case '/ai-chat':
+          return 1;
+        case '/charts':
+        case '/history':
+          return 2;
+        case '/settings':
+        case '/caregiver':
+          return 3;
+        default:
+          return 0;
+      }
     }
 
     void onItemTapped(int index) {
@@ -207,15 +155,12 @@ class _ShellScaffold extends StatelessWidget {
           context.go('/');
           break;
         case 1:
-          context.go('/history');
+          context.go('/ai-chat');
           break;
         case 2:
           context.go('/charts');
           break;
         case 3:
-          context.go('/ai-chat');
-          break;
-        case 4:
           context.go('/settings');
           break;
       }
@@ -223,7 +168,7 @@ class _ShellScaffold extends StatelessWidget {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (currentLoc == '/') {
           context.go('/patients');
@@ -233,29 +178,36 @@ class _ShellScaffold extends StatelessWidget {
       },
       child: Scaffold(
         body: child,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: getSelectedIndex(),
-          onDestinationSelected: onItemTapped,
-          destinations: destinations,
-        ),
-      ),
-    );
-  }
-}
-
-/// Placeholder page to be replaced during feature development
-class _DummyPage extends StatelessWidget {
-  final String title;
-  const _DummyPage({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          '$title Content',
-          style: Theme.of(context).textTheme.headlineMedium,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                width: 1,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.3)
+                    : const Color(0xFF64748B).withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: NavigationBar(
+            height: 68,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            indicatorColor: getSelectedIndex() == 1
+                ? AppColors.tertiary.withValues(alpha: 0.15)
+                : AppColors.primary.withValues(alpha: 0.15),
+            selectedIndex: getSelectedIndex(),
+            onDestinationSelected: onItemTapped,
+            destinations: destinations,
+          ),
         ),
       ),
     );

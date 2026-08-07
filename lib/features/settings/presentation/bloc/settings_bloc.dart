@@ -7,9 +7,8 @@ import 'settings_state.dart';
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final FlutterSecureStorage _secureStorage;
 
-  SettingsBloc({required FlutterSecureStorage secureStorage})
-      : _secureStorage = secureStorage,
-        super(const SettingsState()) {
+  SettingsBloc({required this._secureStorage})
+      : super(const SettingsState()) {
     on<SettingsLoadRequested>(_onSettingsLoadRequested);
     on<ThemeChanged>(_onThemeChanged);
     on<TemperatureUnitChanged>(_onTemperatureUnitChanged);

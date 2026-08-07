@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_section_header.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
+import '../../data/models/caregiver_model.dart';
+import '../widgets/caregiver_list_card.dart';
+import '../widgets/caregiver_permissions_card.dart';
+import '../widgets/caregiver_sharing_toggle.dart';
+import '../widgets/invite_caregiver_card.dart';
 
-/// Screen allowing patient profile consent-driven sharing of vitals data with caregivers.
 class CaregiverPage extends StatefulWidget {
   const CaregiverPage({super.key});
 
@@ -12,14 +21,18 @@ class CaregiverPage extends StatefulWidget {
 }
 
 class _CaregiverPageState extends State<CaregiverPage> {
-  bool _isSharingEnabled = false;
+  bool _isSharingEnabled = true;
   bool _shareVitals = true;
-  bool _shareInsights = false;
+  bool _shareInsights = true;
   bool _notifyOnCritical = true;
 
   final _emailController = TextEditingController();
-  final List<Map<String, dynamic>> _activeCaregivers = [
-    {'name': 'Sarah Doe (Daughter)', 'email': 'sarah@example.com', 'active': true},
+  final List<CaregiverModel> _activeCaregivers = [
+    CaregiverModel(
+      id: '1',
+      name: 'Sarah Vance (Care Coordinator)',
+      email: 'sarah.vance@clinic.org',
+    ),
   ];
 
   @override
@@ -32,164 +45,127 @@ class _CaregiverPageState extends State<CaregiverPage> {
     final email = _emailController.text.trim();
     if (email.contains('@')) {
       setState(() {
-        _activeCaregivers.add({
-          'name': email.split('@')[0],
-          'email': email,
-          'active': true,
-        });
+        _activeCaregivers.add(
+          CaregiverModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            name: email.split('@')[0],
+            email: email,
+          ),
+        );
         _emailController.clear();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Caregiver invitation sent successfully.')),
-      );
+      context.showSnackBar('Caregiver invitation link sent successfully');
+    } else {
+      context.showSnackBar('Please enter a valid email address');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
 
     return BlocBuilder<PatientBloc, PatientState>(
       builder: (context, patientState) {
         if (patientState is! PatientLoadSuccess || patientState.activePatient == null) {
           return const Scaffold(
-            body: Center(child: Text("Please select a patient profile first.")),
+            body: AppEmptyState(
+              icon: Icons.person_search_rounded,
+              title: 'No Active Patient Profile',
+              message: 'Select a patient profile to manage remote caregiver permissions.',
+            ),
           );
         }
 
+        final patient = patientState.activePatient!;
+
         return Scaffold(
-          appBar: AppBar(title: const Text('Caregiver Portal')),
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Caregiver Portal', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text(
+                  'Patient: ${patient.name}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
           body: ListView(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
             children: [
-              // 1. Consent toggle
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Column(
-                    children: [
-                      SwitchListTile(
-                        title: const Text('Enable Remote Data Sharing'),
-                        subtitle: const Text('Allow caregivers to access logs'),
-                        value: _isSharingEnabled,
-                        secondary: const Icon(Icons.share_outlined),
-                        onChanged: (val) {
-                          setState(() => _isSharingEnabled = val);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+              CaregiverSharingToggle(
+                isSharingEnabled: _isSharingEnabled,
+                onChanged: (val) => setState(() => _isSharingEnabled = val),
               ),
-              const SizedBox(height: 16),
-
+              const SizedBox(height: 20),
               if (_isSharingEnabled) ...[
-                // 2. Sharing Permissions Management
-                _buildSectionTitle(theme, 'Sharing Permissions'),
-                Card(
+                const AppSectionHeader(
+                  title: 'Sharing Permissions',
+                  subtitle: 'Control what remote caregivers are allowed to inspect',
+                ),
+                const SizedBox(height: 10),
+                CaregiverPermissionsCard(
+                  shareVitals: _shareVitals,
+                  shareInsights: _shareInsights,
+                  notifyOnCritical: _notifyOnCritical,
+                  onShareVitalsChanged: (val) => setState(() => _shareVitals = val),
+                  onShareInsightsChanged: (val) => setState(() => _shareInsights = val),
+                  onNotifyOnCriticalChanged: (val) => setState(() => _notifyOnCritical = val),
+                ),
+                const SizedBox(height: 24),
+                const AppSectionHeader(
+                  title: 'Connected Caregivers',
+                  subtitle: 'Active family members and medical proxies',
+                ),
+                const SizedBox(height: 10),
+                CaregiverListCard(
+                  caregivers: _activeCaregivers,
+                  onDelete: (cg) => setState(() => _activeCaregivers.remove(cg)),
+                ),
+                const SizedBox(height: 24),
+                const AppSectionHeader(
+                  title: 'Invite Trusted Caregiver',
+                  subtitle: 'Grant remote clinical access via email invite',
+                ),
+                const SizedBox(height: 10),
+                InviteCaregiverCard(
+                  controller: _emailController,
+                  onSendInvite: _addCaregiver,
+                ),
+                const SizedBox(height: 16),
+              ] else
+                AppCard(
+                  padding: const EdgeInsets.all(24.0),
                   child: Column(
                     children: [
-                      CheckboxListTile(
-                        title: const Text('Share Vitals Logs'),
-                        subtitle: const Text('Includes blood pressure, glucose, SpO2, etc.'),
-                        value: _shareVitals,
-                        onChanged: (val) => setState(() => _shareVitals = val ?? false),
+                      const Icon(Icons.shield_outlined, size: 44, color: AppColors.primary),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Remote Sharing Disabled',
+                        style: context.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                       ),
-                      const Divider(height: 1),
-                      CheckboxListTile(
-                        title: const Text('Share AI Insights Summaries'),
-                        subtitle: const Text('Includes assistant summaries & alerts'),
-                        value: _shareInsights,
-                        onChanged: (val) => setState(() => _shareInsights = val ?? false),
-                      ),
-                      const Divider(height: 1),
-                      CheckboxListTile(
-                        title: const Text('Critical Vitals Alert SMS/FCM'),
-                        subtitle: const Text('Sends alerts immediately for emergency readings'),
-                        value: _notifyOnCritical,
-                        onChanged: (val) => setState(() => _notifyOnCritical = val ?? false),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Enable remote data sharing above to add caregivers, invite medical proxies, or manage automated emergency alerts.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          height: 1.4,
+                        ),
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // 3. Caregiver list
-                _buildSectionTitle(theme, 'Connected Caregivers'),
-                Card(
-                  child: Column(
-                    children: _activeCaregivers.map((cg) {
-                      return ListTile(
-                        title: Text(cg['name'] as String),
-                        subtitle: Text(cg['email'] as String),
-                        leading: const CircleAvatar(child: Icon(Icons.person)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              _activeCaregivers.remove(cg);
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // 4. Invite caregiver
-                _buildSectionTitle(theme, 'Invite Trusted Caregiver'),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextFormField(
-                          controller: _emailController,
-                          decoration: const InputDecoration(
-                            labelText: 'Caregiver Email Address',
-                            prefixIcon: Icon(Icons.mail_outline),
-                          ),
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _addCaregiver,
-                          child: const Text('Send Invitation Link'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else
-                Card(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
-                  child: const Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Text(
-                      'Remote data sharing is disabled. Enable remote sharing above to add caregivers, invite family members, or manage notifications.',
-                      textAlign: TextAlign.center,
-                    ),
                   ),
                 ),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildSectionTitle(ThemeData theme, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
-      child: Text(
-        text,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.primary,
-        ),
-      ),
     );
   }
 }

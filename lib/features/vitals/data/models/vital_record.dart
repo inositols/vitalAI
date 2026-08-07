@@ -1,7 +1,7 @@
+import 'package:uuid/uuid.dart';
+
 /// VitalRecord represents local and calculated health vitals readings.
 class VitalRecord {
-  VitalRecord();
-
   /// Local autoincrement ID.
   int id = 0;
 
@@ -58,6 +58,14 @@ class VitalRecord {
   /// Local update timestamp.
   late DateTime updatedAt;
 
+  VitalRecord() {
+    remoteId = const Uuid().v4();
+    patientId = 0;
+    dateTime = DateTime.now();
+    isSynced = false;
+    updatedAt = DateTime.now();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -83,10 +91,12 @@ class VitalRecord {
 
   factory VitalRecord.fromJson(Map<String, dynamic> json) {
     return VitalRecord()
-      ..id = json['id'] as int
-      ..remoteId = json['remoteId'] as String
-      ..patientId = json['patientId'] as int
-      ..dateTime = DateTime.parse(json['dateTime'] as String)
+      ..id = json['id'] as int? ?? 0
+      ..remoteId = json['remoteId'] as String? ?? const Uuid().v4()
+      ..patientId = json['patientId'] as int? ?? 0
+      ..dateTime = json['dateTime'] != null
+          ? DateTime.parse(json['dateTime'] as String)
+          : DateTime.now()
       ..systolic = (json['systolic'] as num?)?.toDouble()
       ..diastolic = (json['diastolic'] as num?)?.toDouble()
       ..glucoseValue = (json['glucoseValue'] as num?)?.toDouble()
@@ -99,8 +109,9 @@ class VitalRecord {
       ..note = json['note'] as String?
       ..deviceUsed = json['deviceUsed'] as String?
       ..tags = List<String>.from(json['tags'] ?? [])
-      ..isSynced = json['isSynced'] as bool
-      ..updatedAt = DateTime.parse(json['updatedAt'] as String);
+      ..isSynced = json['isSynced'] as bool? ?? false
+      ..updatedAt = json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : DateTime.now();
   }
 }
-

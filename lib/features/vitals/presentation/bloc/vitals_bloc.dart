@@ -6,9 +6,8 @@ import 'vitals_state.dart';
 class VitalsBloc extends Bloc<VitalsEvent, VitalsState> {
   final VitalsRepository _vitalsRepository;
 
-  VitalsBloc({required VitalsRepository vitalsRepository})
-      : _vitalsRepository = vitalsRepository,
-        super(VitalsInitial()) {
+  VitalsBloc({required this._vitalsRepository})
+      : super(VitalsInitial()) {
     on<VitalsListRequested>(_onVitalsListRequested);
     on<VitalsFilteredRequested>(_onVitalsFilteredRequested);
     on<VitalsRecordSaved>(_onVitalsRecordSaved);

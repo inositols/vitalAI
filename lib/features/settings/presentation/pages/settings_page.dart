@@ -2,6 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/extensions/build_context_ext.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_brand_logo.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../bloc/settings_bloc.dart';
 import '../bloc/settings_event.dart';
 import '../bloc/settings_state.dart';
@@ -11,8 +15,9 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import 'package:vitalai/features/patients/presentation/bloc/patient_bloc.dart';
 import 'package:vitalai/features/patients/presentation/bloc/patient_state.dart';
+import '../widgets/api_key_dialog.dart';
+import '../widgets/settings_section.dart';
 
-/// Settings screen for configuring user preferences, language, styling accessibility, and API keys.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -21,428 +26,269 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return BlocBuilder<SettingsBloc, SettingsState>(
-      builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('Settings')),
-          body: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-            children: [
-              // 0. Active Profile Context Header
-              _buildProfileHeader(context),
-
-              // 1. Theme Configuration Section
-              _buildSectionTitle(theme, 'Theme & Accessibility'),
-              Card(
-                margin: const EdgeInsets.only(bottom: 24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.color_filter,
-                        iconBg: const Color(0xFF8A3FFC), // Violet
-                        title: 'Dark Mode Preference',
-                        subtitle: _getThemeModeLabel(state.themeMode),
-                        onTap: () => _showThemeSelectionDialog(context, state),
-                      ),
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.eye,
-                        iconBg: const Color(0xFF0F62FE), // Blue
-                        title: 'High Contrast Text/Borders',
-                        subtitle: 'Enhance visibility controls',
-                        isLast: true,
-                        trailing: CupertinoSwitch(
-                          value: state.isHighContrast,
-                          activeColor: theme.colorScheme.primary,
-                          onChanged: (val) {
-                            context.read<SettingsBloc>().add(ThemeChanged(
-                                  themeMode: state.themeMode,
-                                  isHighContrast: val,
-                                ));
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 2. Unit Preferences Section
-              _buildSectionTitle(theme, 'Measurement Units'),
-              Card(
-                margin: const EdgeInsets.only(bottom: 24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.thermometer,
-                        iconBg: const Color(0xFFFF5B4E), // Orange-Red
-                        title: 'Temperature Unit',
-                        subtitle: state.tempUnit == 'C'
-                            ? 'Celsius (°C)'
-                            : 'Fahrenheit (°F)',
-                        onTap: () => _toggleTempUnit(context, state),
-                      ),
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.drop,
-                        iconBg: const Color(0xFF008A5E), // Teal-Green
-                        title: 'Blood Glucose Unit',
-                        subtitle: state.glucoseUnit,
-                        onTap: () => _toggleGlucoseUnit(context, state),
-                      ),
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.arrow_down_to_line_alt,
-                        iconBg: const Color(0xFF0F8CFF), // Sky Blue
-                        title: 'Weight Unit',
-                        subtitle: state.weightUnit,
-                        isLast: true,
-                        onTap: () => _toggleWeightUnit(context, state),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 3. AI Integrations Section
-              _buildSectionTitle(theme, 'AI Integration'),
-              Card(
-                margin: const EdgeInsets.only(bottom: 32),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: theme.dividerColor.withOpacity(0.08),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      _buildSettingTile(
-                        context,
-                        icon: CupertinoIcons.sparkles,
-                        iconBg: const Color(0xFFFFB300), // Gold-Amber
-                        title: 'Enable AI Insights',
-                        subtitle: 'Processes vitals history context',
-                        isLast: true,
-                        trailing: CupertinoSwitch(
-                          value: state.aiConsent,
-                          activeColor: theme.colorScheme.primary,
-                          onChanged: (val) {
-                            context
-                                .read<SettingsBloc>()
-                                .add(AiConsentToggled(val));
-                            locator<AiService>().setConsent(val);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 4. Logout Session
-              Card(
-                color: theme.colorScheme.errorContainer.withOpacity(0.12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: theme.colorScheme.error.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-                elevation: 0,
-                child: InkWell(
-                  onTap: () {
-                    context.read<AuthBloc>().add(AuthSignOutPressed());
-                    context.go('/login');
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          CupertinoIcons.square_arrow_right,
-                          color: theme.colorScheme.error,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Log Out Session',
-                          style: TextStyle(
-                            color: theme.colorScheme.error,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileHeader(BuildContext context) {
-    final theme = Theme.of(context);
-    return BlocBuilder<PatientBloc, PatientState>(
-      builder: (context, state) {
-        final patientName =
-            (state is PatientLoadSuccess && state.activePatient != null)
-                ? state.activePatient!.name
-                : 'No Profile Selected';
-        final patientAge =
-            (state is PatientLoadSuccess && state.activePatient != null)
-                ? 'Born ${state.activePatient!.dateOfBirth.toIso8601String().split('T')[0]}'
-                : 'Switch to a profile context';
-        final initials =
-            patientName.isNotEmpty ? patientName[0].toUpperCase() : '?';
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 24),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                theme.colorScheme.primary,
-                theme.colorScheme.tertiary,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.12),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.white,
-                child: Text(
-                  initials,
-                  style: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      patientName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      patientAge,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
-                        fontSize: 13,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(CupertinoIcons.arrow_2_circlepath,
-                    color: Colors.white),
-                tooltip: 'Switch Patient Profile',
-                onPressed: () => context.go('/patients'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSectionTitle(ThemeData theme, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 6.0, bottom: 10.0),
-      child: Text(
-        text,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.primary,
-          fontSize: 15,
-        ),
+  void _openApiKeyDialog(BuildContext context, String currentKey) {
+    showDialog(
+      context: context,
+      builder: (ctx) => ApiKeyDialog(
+        currentApiKey: currentKey,
+        onSave: (newKey) {
+          context.read<SettingsBloc>().add(ApiKeyUpdated(newKey));
+          locator<AiService>().updateApiKey(newKey);
+        },
       ),
     );
   }
 
-  Widget _buildSettingTile(
-    BuildContext context, {
-    required IconData icon,
-    required Color iconBg,
-    required String title,
-    String? subtitle,
-    Widget? trailing,
-    VoidCallback? onTap,
-    bool isLast = false,
-  }) {
-    final theme = Theme.of(context);
-    return Column(
-      children: [
-        ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: Colors.white, size: 18),
-          ),
-          title: Text(
-            title,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-            ),
-          ),
-          subtitle: subtitle != null
-              ? Text(
-                  subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
-                    fontSize: 13,
-                  ),
-                )
-              : null,
-          trailing: trailing ??
-              const Icon(
-                CupertinoIcons.chevron_forward,
-                size: 16,
-                color: Colors.grey,
-              ),
-          onTap: onTap,
-        ),
-        if (!isLast)
-          Divider(
-            height: 1,
-            indent: 68,
-            endIndent: 16,
-            color: theme.dividerColor.withOpacity(0.08),
-          ),
-      ],
-    );
-  }
-
-  String _getThemeModeLabel(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'Light Mode';
-      case ThemeMode.dark:
-        return 'Dark Mode';
-      case ThemeMode.system:
-        return 'Follow System';
-    }
-  }
-
-  void _showThemeSelectionDialog(BuildContext context, SettingsState state) {
+  void _confirmSignOut(BuildContext context) {
+    final isDark = context.isDarkMode;
     showDialog(
       context: context,
-      builder: (dialogCtx) => SimpleDialog(
-        title: const Text('Select Display Mode'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () {
-              context.read<SettingsBloc>().add(ThemeChanged(
-                    themeMode: ThemeMode.light,
-                    isHighContrast: state.isHighContrast,
-                  ));
-              Navigator.pop(dialogCtx);
-            },
-            child: const Text('Light Mode'),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xxl)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: AppColors.error, size: 24),
+            SizedBox(width: 10),
+            Text('Sign Out?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to sign out of your VitalAI account?',
+          style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-          SimpleDialogOption(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
-              context.read<SettingsBloc>().add(ThemeChanged(
-                    themeMode: ThemeMode.dark,
-                    isHighContrast: state.isHighContrast,
-                  ));
-              Navigator.pop(dialogCtx);
+              Navigator.pop(ctx);
+              context.read<AuthBloc>().add(AuthSignOutPressed());
+              context.go('/login');
             },
-            child: const Text('Dark Mode'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              context.read<SettingsBloc>().add(ThemeChanged(
-                    themeMode: ThemeMode.system,
-                    isHighContrast: state.isHighContrast,
-                  ));
-              Navigator.pop(dialogCtx);
-            },
-            child: const Text('Follow System'),
+            child: const Text('Sign Out'),
           ),
         ],
       ),
     );
   }
 
-  void _toggleTempUnit(BuildContext context, SettingsState state) {
-    final next = state.tempUnit == 'C' ? 'F' : 'C';
-    context.read<SettingsBloc>().add(TemperatureUnitChanged(next));
-  }
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
 
-  void _toggleGlucoseUnit(BuildContext context, SettingsState state) {
-    final next = state.glucoseUnit == 'mg/dL' ? 'mmol/L' : 'mg/dL';
-    context.read<SettingsBloc>().add(GlucoseUnitChanged(next));
-  }
+    return BlocBuilder<SettingsBloc, SettingsState>(
+      builder: (context, state) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Row(
+              children: [
+                AppBrandLogo(
+                  size: 28,
+                  iconSize: 14,
+                ),
+                SizedBox(width: 8),
+                Text('Settings & Preferences'),
+              ],
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+            children: [
+              // Patient Profile Card Context
+              BlocBuilder<PatientBloc, PatientState>(
+                builder: (context, patientState) {
+                  final active = patientState is PatientLoadSuccess
+                      ? patientState.activePatient
+                      : null;
+                  return AppCard(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: ListTile(
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppColors.primaryGradient,
+                        ),
+                        child: Center(
+                          child: Text(
+                            active != null && active.name.isNotEmpty
+                                ? active.name[0].toUpperCase()
+                                : 'P',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        active != null ? active.name : 'No Active Patient',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                      ),
+                      subtitle: Text(
+                        active != null
+                            ? '${active.gender} • ${active.height.toInt()} cm • ${active.weight.toInt()} kg'
+                            : 'Tap to select active profile',
+                        style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                      ),
+                      trailing: const Icon(Icons.swap_horiz_rounded, size: 22, color: AppColors.primary),
+                      onTap: () => context.go('/patients'),
+                    ),
+                  );
+                },
+              ),
 
-  void _toggleWeightUnit(BuildContext context, SettingsState state) {
-    final next = state.weightUnit == 'kg' ? 'lbs' : 'kg';
-    context.read<SettingsBloc>().add(WeightUnitChanged(next));
+              // Caregiver & Sharing Section
+              SettingsSection(
+                title: 'Sharing & Caregivers',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.person_2_fill,
+                    iconBg: AppColors.primary,
+                    title: 'Caregiver Portal',
+                    subtitle: 'Manage family access & remote emergency sharing',
+                    onTap: () => context.go('/caregiver'),
+                  ),
+                ],
+              ),
+
+              // Theme & Accessibility
+              SettingsSection(
+                title: 'Theme & Accessibility',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.color_filter,
+                    iconBg: const Color(0xFF8A3FFC),
+                    title: 'Appearance Mode',
+                    subtitle: state.themeMode == ThemeMode.dark
+                        ? 'Dark Mode'
+                        : state.themeMode == ThemeMode.light
+                            ? 'Light Mode'
+                            : 'System Default',
+                    onTap: () {
+                      final next = state.themeMode == ThemeMode.dark
+                          ? ThemeMode.light
+                          : ThemeMode.dark;
+                      context.read<SettingsBloc>().add(
+                            ThemeChanged(
+                              themeMode: next,
+                              isHighContrast: state.isHighContrast,
+                            ),
+                          );
+                    },
+                  ),
+                  SettingTileItem(
+                    icon: CupertinoIcons.eye,
+                    iconBg: const Color(0xFF0F62FE),
+                    title: 'High Contrast Mode',
+                    subtitle: 'Enhance text legibility and outline boundaries',
+                    trailing: CupertinoSwitch(
+                      value: state.isHighContrast,
+                      activeTrackColor: AppColors.primary,
+                      onChanged: (val) {
+                        context.read<SettingsBloc>().add(
+                              ThemeChanged(
+                                themeMode: state.themeMode,
+                                isHighContrast: val,
+                              ),
+                            );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              // App Experience
+              SettingsSection(
+                title: 'App Experience',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.compass_fill,
+                    iconBg: AppColors.tertiary,
+                    title: 'Replay Onboarding Tour',
+                    subtitle: 'View intro slides & feature walkthrough',
+                    onTap: () => context.go('/onboarding'),
+                  ),
+                ],
+              ),
+
+              // Units Configuration
+              SettingsSection(
+                title: 'Measurement Units',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.drop,
+                    iconBg: AppColors.glucoseVital,
+                    title: 'Blood Glucose Unit',
+                    subtitle: state.glucoseUnit,
+                    onTap: () {
+                      final next = state.glucoseUnit == 'mg/dL' ? 'mmol/L' : 'mg/dL';
+                      context.read<SettingsBloc>().add(GlucoseUnitChanged(next));
+                    },
+                  ),
+                  SettingTileItem(
+                    icon: CupertinoIcons.thermometer,
+                    iconBg: AppColors.tempVital,
+                    title: 'Temperature Unit',
+                    subtitle: '°${state.tempUnit}',
+                    onTap: () {
+                      final next = state.tempUnit == 'C' ? 'F' : 'C';
+                      context.read<SettingsBloc>().add(TemperatureUnitChanged(next));
+                    },
+                  ),
+                  SettingTileItem(
+                    icon: CupertinoIcons.speedometer,
+                    iconBg: AppColors.weightVital,
+                    title: 'Weight Unit',
+                    subtitle: state.weightUnit,
+                    onTap: () {
+                      final next = state.weightUnit == 'kg' ? 'lbs' : 'kg';
+                      context.read<SettingsBloc>().add(WeightUnitChanged(next));
+                    },
+                  ),
+                ],
+              ),
+
+              // AI Engine & API Keys
+              SettingsSection(
+                title: 'AI Companion & Engine',
+                children: [
+                  SettingTileItem(
+                    icon: CupertinoIcons.sparkles,
+                    iconBg: AppColors.tertiary,
+                    title: 'Gemini API Key',
+                    subtitle: state.apiKey.isNotEmpty ? 'Custom Key Configured' : 'Default Key Active',
+                    onTap: () => _openApiKeyDialog(context, state.apiKey),
+                  ),
+                ],
+              ),
+
+              // Account & Log Out
+              SettingsSection(
+                title: 'Account & Security',
+                children: [
+                  SettingTileItem(
+                    icon: Icons.logout_rounded,
+                    iconBg: AppColors.error,
+                    title: 'Sign Out',
+                    subtitle: 'Log out of current session',
+                    onTap: () => _confirmSignOut(context),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

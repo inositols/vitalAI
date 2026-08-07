@@ -5,12 +5,10 @@ import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final AuthRepository _authRepository;
+  final AuthRepository authRepository;
   StreamSubscription<AuthUser?>? _authStateSubscription;
 
-  AuthBloc({required AuthRepository authRepository})
-      : _authRepository = authRepository,
-        super(AuthInitial()) {
+  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthEmailSignInPressed>(_onAuthEmailSignInPressed);
     on<AuthEmailSignUpPressed>(_onAuthEmailSignUpPressed);
@@ -18,19 +16,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthAnonymousSignInPressed>(_onAuthAnonymousSignInPressed);
     on<AuthSignOutPressed>(_onAuthSignOutPressed);
 
-    // Monitor changes in authorization status
-    _authStateSubscription = _authRepository.authStateChanges.listen((user) {
-      if (user != null) {
-        add(AuthCheckRequested());
-      } else {
-        emit(AuthUnauthenticated());
-      }
+    _authStateSubscription = authRepository.authStateChanges.listen((_) {
+      add(AuthCheckRequested());
     });
   }
 
   Future<void> _onAuthCheckRequested(
       AuthCheckRequested event, Emitter<AuthState> emit) async {
-    final user = _authRepository.currentUser;
+    final user = authRepository.currentUser;
     if (user != null) {
       emit(AuthAuthenticated(user));
     } else {
@@ -42,12 +35,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthEmailSignInPressed event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
-      final user = await _authRepository.signInWithEmailAndPassword(
+      final user = await authRepository.signInWithEmailAndPassword(
           event.email, event.password);
       emit(AuthAuthenticated(user));
     } catch (e) {
-      final message = e.toString().replaceFirst('Exception: ', '');
-      emit(AuthFailure(message));
+      final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      emit(AuthFailure(msg));
     }
   }
 
@@ -55,12 +48,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthEmailSignUpPressed event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
-      final user = await _authRepository.registerWithEmailAndPassword(
+      final user = await authRepository.registerWithEmailAndPassword(
           event.email, event.password);
       emit(AuthAuthenticated(user));
     } catch (e) {
-      final message = e.toString().replaceFirst('Exception: ', '');
-      emit(AuthFailure(message));
+      final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      emit(AuthFailure(msg));
     }
   }
 
@@ -68,11 +61,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthGoogleSignInPressed event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
-      final user = await _authRepository.signInWithGoogle();
+      final user = await authRepository.signInWithGoogle();
       emit(AuthAuthenticated(user));
     } catch (e) {
-      final message = e.toString().replaceFirst('Exception: ', '');
-      emit(AuthFailure(message));
+      final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      emit(AuthFailure(msg));
     }
   }
 
@@ -80,19 +73,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthAnonymousSignInPressed event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
-      final user = await _authRepository.signInAnonymously();
+      final user = await authRepository.signInAnonymously();
       emit(AuthAuthenticated(user));
     } catch (e) {
-      final message = e.toString().replaceFirst('Exception: ', '');
-      emit(AuthFailure(message));
+      final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      emit(AuthFailure(msg));
     }
   }
 
   Future<void> _onAuthSignOutPressed(
       AuthSignOutPressed event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
-    await _authRepository.signOut();
-    emit(AuthUnauthenticated());
+    try {
+      await authRepository.signOut();
+      emit(AuthUnauthenticated());
+    } catch (e) {
+      final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      emit(AuthFailure(msg));
+    }
   }
 
   @override
