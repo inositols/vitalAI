@@ -2,52 +2,40 @@ import 'package:flutter/material.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_card.dart';
-import 'vitals_status_badge.dart';
 
 class VitalsSummaryGrid extends StatelessWidget {
   final Map<String, String> latestVitals;
   final VoidCallback? onAddVital;
+  final Function(String metricType)? onMetricTap;
 
   const VitalsSummaryGrid({
     super.key,
     required this.latestVitals,
     this.onAddVital,
+    this.onMetricTap,
   });
 
-  VitalStatusLevel _getBpStatus(String value) {
+  String _getBpStatus(String value) {
     if (value.contains('/')) {
       final parts = value.split('/');
       final sys = int.tryParse(parts[0].replaceAll(RegExp(r'[^0-9]'), ''));
       final dia = int.tryParse(parts[1].replaceAll(RegExp(r'[^0-9]'), ''));
       if (sys != null && dia != null) {
-        if (sys < 90 || dia < 60) return VitalStatusLevel.low;
-        if (sys >= 130 || dia > 80) return VitalStatusLevel.high;
-        if (sys > 120) return VitalStatusLevel.elevated;
-        return VitalStatusLevel.normal;
+        if (sys >= 130 || dia >= 80) return 'Elevated';
+        if (sys >= 120 && dia < 80) return 'Pre-high';
+        return 'Normal';
       }
     }
-    return VitalStatusLevel.normal;
+    return 'Normal';
   }
 
-  VitalStatusLevel _getGlucoseStatus(String value) {
+  String _getGlucoseStatus(String value) {
     final val = double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), ''));
     if (val != null) {
-      if (val < 70) return VitalStatusLevel.low;
-      if (val > 140) return VitalStatusLevel.high;
-      if (val > 120) return VitalStatusLevel.elevated;
-      return VitalStatusLevel.normal;
+      if (val > 120) return 'Elevated';
+      return 'Normal';
     }
-    return VitalStatusLevel.normal;
-  }
-
-  VitalStatusLevel _getPulseStatus(String value) {
-    final val = double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), ''));
-    if (val != null) {
-      if (val < 60) return VitalStatusLevel.low;
-      if (val > 100) return VitalStatusLevel.high;
-      return VitalStatusLevel.normal;
-    }
-    return VitalStatusLevel.normal;
+    return 'Normal';
   }
 
   @override
@@ -55,57 +43,83 @@ class VitalsSummaryGrid extends StatelessWidget {
     final bp = latestVitals['bp'];
     final glucose = latestVitals['glucose'];
     final pulse = latestVitals['pulse'];
+    final spo2 = latestVitals['spo2'] ?? '98';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Favorites',
+          style: context.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // Row 1: Blood Pressure & Heart Rate
         Row(
           children: [
-            const Icon(AppIcons.vitals, color: AppColors.primary, size: 17),
-            const SizedBox(width: 8),
-            Text(
-              'Latest Health Vitals',
-              style: context.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                letterSpacing: -0.2,
+            Expanded(
+              child: _AppleHealthTile(
+                icon: Icons.favorite_rounded,
+                iconColor: AppColors.bpVital,
+                title: 'Blood Pressure',
+                value: bp != null ? bp.replaceAll(' mmHg', '') : '--/--',
+                unit: 'mmHg',
+                subtitle: bp != null ? _getBpStatus(bp) : 'No data',
+                statusColor: (bp != null && _getBpStatus(bp) == 'Normal')
+                    ? AppColors.secondary
+                    : AppColors.warning,
+                onTap: () => onMetricTap?.call('bp'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _AppleHealthTile(
+                icon: Icons.monitor_heart_rounded,
+                iconColor: AppColors.pulseVital,
+                title: 'Heart Rate',
+                value: pulse != null ? pulse.replaceAll(' bpm', '') : '--',
+                unit: 'BPM',
+                subtitle: pulse != null ? 'Resting' : 'No data',
+                statusColor: AppColors.secondary,
+                onTap: () => onMetricTap?.call('pulse'),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
+
+        // Row 2: Blood Glucose & Oxygen
         Row(
           children: [
             Expanded(
-              child: _VitalTile(
-                icon: AppIcons.bloodPressure,
-                badgeColor: AppColors.bpVital,
-                label: 'Blood Pressure',
-                value: bp,
-                normalRange: '≤ 120/80 mmHg',
-                statusLevel: bp != null ? _getBpStatus(bp) : null,
+              child: _AppleHealthTile(
+                icon: Icons.water_drop_rounded,
+                iconColor: AppColors.glucoseVital,
+                title: 'Blood Glucose',
+                value: glucose != null ? glucose.replaceAll(' mg/dL', '') : '--',
+                unit: 'mg/dL',
+                subtitle: glucose != null ? 'Fasting' : 'No data',
+                statusColor: (glucose != null && _getGlucoseStatus(glucose) == 'Normal')
+                    ? AppColors.secondary
+                    : AppColors.warning,
+                onTap: () => onMetricTap?.call('glucose'),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _VitalTile(
-                icon: AppIcons.glucose,
-                badgeColor: AppColors.glucoseVital,
-                label: 'Glucose',
-                value: glucose,
-                normalRange: '70–120 mg/dL',
-                statusLevel: glucose != null ? _getGlucoseStatus(glucose) : null,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _VitalTile(
-                icon: AppIcons.pulse,
-                badgeColor: AppColors.pulseVital,
-                label: 'Pulse Rate',
-                value: pulse,
-                normalRange: '60–100 bpm',
-                statusLevel: pulse != null ? _getPulseStatus(pulse) : null,
+              child: _AppleHealthTile(
+                icon: Icons.air_rounded,
+                iconColor: AppColors.spo2Vital,
+                title: 'Oxygen (SpO₂)',
+                value: spo2,
+                unit: '%',
+                subtitle: 'Optimal',
+                statusColor: AppColors.secondary,
+                onTap: () => onMetricTap?.call('spo2'),
               ),
             ),
           ],
@@ -115,100 +129,107 @@ class VitalsSummaryGrid extends StatelessWidget {
   }
 }
 
-class _VitalTile extends StatelessWidget {
+class _AppleHealthTile extends StatelessWidget {
   final IconData icon;
-  final Color badgeColor;
-  final String label;
-  final String? value;
-  final String normalRange;
-  final VitalStatusLevel? statusLevel;
+  final Color iconColor;
+  final String title;
+  final String value;
+  final String unit;
+  final String subtitle;
+  final Color statusColor;
+  final VoidCallback? onTap;
 
-  const _VitalTile({
+  const _AppleHealthTile({
     required this.icon,
-    required this.badgeColor,
-    required this.label,
+    required this.iconColor,
+    required this.title,
     required this.value,
-    required this.normalRange,
-    required this.statusLevel,
+    required this.unit,
+    required this.subtitle,
+    required this.statusColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
-    final hasData = value != null && value!.isNotEmpty;
+    final hasData = value != '--' && value != '--/--';
 
     return AppCard(
-      padding: const EdgeInsets.all(12),
-      borderRadius: AppRadius.lg,
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
+      borderRadius: AppRadius.xl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: badgeColor, size: 16),
-              const SizedBox(width: 4),
-              if (hasData && statusLevel != null)
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: VitalsStatusBadge(level: statusLevel!),
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04)),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Text(
-                    'No Data',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    ),
+              Icon(icon, color: iconColor, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            label,
-            style: context.textTheme.labelSmall?.copyWith(
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              fontWeight: FontWeight.w600,
-              fontSize: 10.5,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.7,
+                  color: hasData
+                      ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                      : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                ),
+              ),
+              if (hasData && unit.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  unit,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            hasData ? value! : '--',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: hasData
-                  ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)
-                  : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Normal: $normalRange',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w500,
-              color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-            ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: hasData ? statusColor : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
           ),
         ],
       ),

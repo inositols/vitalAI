@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/widgets/app_brand_logo.dart';
+import '../../../../core/theme/design_tokens.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../../../settings/presentation/bloc/settings_bloc.dart';
 import '../../../settings/presentation/bloc/settings_event.dart';
 import '../../../settings/presentation/bloc/settings_state.dart';
+import '../../data/models/health_context.dart';
 import '../bloc/ai_assistant_bloc.dart';
 import '../bloc/ai_assistant_event.dart';
 import '../bloc/ai_assistant_state.dart';
@@ -71,7 +72,8 @@ class _AiChatPageState extends State<AiChatPage> {
 
   void _replyToMessage(String text) {
     setState(() {
-      _controller.text = 'Regarding: "${text.length > 55 ? '${text.substring(0, 52)}...' : text}"\n';
+      final preview = text.length > 55 ? '${text.substring(0, 52)}...' : text;
+      _controller.text = 'Regarding: "$preview"\n';
       _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
     });
   }
@@ -92,14 +94,18 @@ class _AiChatPageState extends State<AiChatPage> {
     );
   }
 
-  void _showAttachmentMenu(BuildContext context) {
+  void _showAttachmentMenu(BuildContext context, HealthContext? healthContext) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => AttachmentMenuBottomSheet(
+        healthContext: healthContext,
         onSelectAttachment: (attachmentText) {
           Navigator.pop(ctx);
-          setState(() => _controller.text = attachmentText);
+          setState(() {
+            _controller.text = attachmentText;
+            _controller.selection = TextSelection.collapsed(offset: attachmentText.length);
+          });
         },
       ),
     );
@@ -111,7 +117,7 @@ class _AiChatPageState extends State<AiChatPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalCtx) => FractionallySizedBox(
-        heightFactor: 0.75,
+        heightFactor: 0.8,
         child: ConversationDrawer(
           conversations: state.conversations,
           activeConversationId: state.activeConversation.id,
@@ -124,9 +130,64 @@ class _AiChatPageState extends State<AiChatPage> {
     );
   }
 
+  void _openApiKeyDialog(BuildContext context, String currentKey) {
+    final textController = TextEditingController(text: currentKey);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.key_rounded, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('Gemini API Key', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your Google Gemini API key to enable live AI responses from Gemini 1.5 Flash.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: textController,
+              decoration: const InputDecoration(
+                labelText: 'API Key (AIzaSy...)',
+                hintText: 'Paste your Gemini API key here',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newKey = textController.text.trim();
+              context.read<SettingsBloc>().add(ApiKeyUpdated(newKey));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('✓ Gemini API Key updated successfully! Live AI active.')),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            child: const Text('Save Key'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settings) {
@@ -161,22 +222,37 @@ class _AiChatPageState extends State<AiChatPage> {
                   return Scaffold(
                     appBar: AppBar(title: const Text('Ask VitalAI')),
                     body: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
-                          const SizedBox(height: 12),
-                          Text(aiState.message),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () {
-                              if (_activePatientId != null) {
-                                context.read<AiAssistantBloc>().add(AiAssistantInit(_activePatientId!));
-                              }
-                            },
-                            child: const Text('Retry'),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppColors.errorContainer.withValues(alpha: 0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.error_outline_rounded, size: 48, color: theme.colorScheme.error),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              aiState.message,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Retry Connection'),
+                              onPressed: () {
+                                if (_activePatientId != null) {
+                                  context.read<AiAssistantBloc>().add(AiAssistantInit(_activePatientId!));
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -193,17 +269,11 @@ class _AiChatPageState extends State<AiChatPage> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const AppBrandLogo(
-                              size: 24,
-                              iconSize: 12,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Ask VitalAI',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                            const Text(
+                              'Ask VitalAI',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -214,13 +284,29 @@ class _AiChatPageState extends State<AiChatPage> {
                           activePatient != null ? 'Patient: ${activePatient.name}' : 'No Patient Selected',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            fontSize: 11.5,
+                          ),
                         ),
                       ],
                     ),
                     actions: [
-                      IconButton(icon: const Icon(Icons.history), tooltip: 'Chat History', onPressed: () => _openConversationHistory(context, loadedState)),
-                      IconButton(icon: const Icon(Icons.add), tooltip: 'New Conversation', onPressed: () => context.read<AiAssistantBloc>().add(const AiAssistantNewChat())),
+                      IconButton(
+                        icon: const Icon(Icons.key_rounded),
+                        tooltip: 'Gemini API Key',
+                        onPressed: () => _openApiKeyDialog(context, settings.apiKey),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.history_rounded),
+                        tooltip: 'Chat Sessions',
+                        onPressed: () => _openConversationHistory(context, loadedState),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_comment_rounded),
+                        tooltip: 'New Conversation',
+                        onPressed: () => context.read<AiAssistantBloc>().add(const AiAssistantNewChat()),
+                      ),
                     ],
                   ),
                   body: SafeArea(
@@ -268,7 +354,7 @@ class _AiChatPageState extends State<AiChatPage> {
                           controller: _controller,
                           hasInputText: _hasInputText,
                           isGenerating: loadedState.isGenerating,
-                          onAttachContext: () => _showAttachmentMenu(context),
+                          onAttachContext: () => _showAttachmentMenu(context, loadedState.healthContext),
                           onVoiceInput: () => _openVoiceDictationModal(context),
                           onSend: _sendMessage,
                         ),

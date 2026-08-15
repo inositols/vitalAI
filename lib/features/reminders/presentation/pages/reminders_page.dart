@@ -15,8 +15,27 @@ import '../bloc/reminders_event.dart';
 import '../bloc/reminders_state.dart';
 import '../widgets/add_reminder_sheet.dart';
 
-class RemindersPage extends StatelessWidget {
+class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
+
+  @override
+  State<RemindersPage> createState() => _RemindersPageState();
+}
+
+class _RemindersPageState extends State<RemindersPage> {
+  @override
+  void initState() {
+    super.initState();
+    _loadReminders();
+  }
+
+  void _loadReminders() {
+    final patientState = context.read<PatientBloc>().state;
+    final patientId = patientState is PatientLoadSuccess && patientState.activePatient != null
+        ? patientState.activePatient!.id
+        : 1;
+    context.read<RemindersBloc>().add(RemindersListRequested(patientId));
+  }
 
   void _openAddSheet(BuildContext context, int patientId) {
     showModalBottomSheet(
@@ -34,11 +53,11 @@ class RemindersPage extends StatelessWidget {
     final patientState = context.watch<PatientBloc>().state;
     final patientId = patientState is PatientLoadSuccess && patientState.activePatient != null
         ? patientState.activePatient!.id
-        : 0;
+        : 1;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Reminders', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        title: const Text('Health Reminders', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.go('/'),
@@ -46,12 +65,12 @@ class RemindersPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_active_outlined),
-            tooltip: 'Test Immediate Notification',
+            tooltip: 'Test Alert Banner',
             onPressed: () {
               locator<NotificationService>().showNotification(
                 id: DateTime.now().millisecond,
                 title: 'Health Reminder Test',
-                body: 'Your system health notifications are working perfectly!',
+                body: 'Your VitalAI reminder alerts are configured and active!',
               );
             },
           ),
@@ -68,21 +87,44 @@ class RemindersPage extends StatelessWidget {
 
             if (list.isEmpty) {
               return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.notifications_off_outlined, size: 56, color: AppColors.primary),
-                    const SizedBox(height: 12),
-                    const Text('No Health Reminders Set', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    const Text('Schedule daily vital checks or medication alerts'),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _openAddSheet(context, patientId),
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add First Reminder'),
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.primary),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No Reminders Scheduled',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Set daily notifications for blood pressure checks, fasting glucose, or medications.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () => _openAddSheet(context, patientId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.full)),
+                        ),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Add Reminder', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }

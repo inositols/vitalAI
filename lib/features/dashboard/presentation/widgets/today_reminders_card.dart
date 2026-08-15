@@ -132,37 +132,37 @@ class _ReminderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: reminder.isCompleted
-            ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC))
-            : (isDark ? const Color(0xFF16203B) : Colors.white),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A365C) : const Color(0xFFE2E8F0),
-          width: 0.6,
+    return InkWell(
+      onTap: () {
+        context.read<RemindersBloc>().add(
+              ReminderCompletionToggled(
+                id: reminder.id,
+                patientId: reminder.patientId,
+              ),
+            );
+      },
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: reminder.isCompleted
+              ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC))
+              : (isDark ? const Color(0xFF16203B) : Colors.white),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: isDark ? const Color(0xFF2A365C) : const Color(0xFFE2E8F0),
+            width: 0.6,
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () {
-              context.read<RemindersBloc>().add(
-                    ReminderCompletionToggled(
-                      id: reminder.id,
-                      patientId: reminder.patientId,
-                    ),
-                  );
-            },
-            child: Icon(
+        child: Row(
+          children: [
+            Icon(
               reminder.isCompleted ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
               size: 18,
               color: reminder.isCompleted ? AppColors.secondary : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
+            const SizedBox(width: 10),
+            Expanded(
             child: Text(
               reminder.title,
               maxLines: 1,
@@ -187,6 +187,7 @@ class _ReminderTile extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

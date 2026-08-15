@@ -25,12 +25,14 @@ class ChatInputBar extends StatelessWidget {
     final isDark = context.isDarkMode;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withValues(alpha: 0.3) : const Color(0xFF64748B).withValues(alpha: 0.08),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.35)
+                : const Color(0xFF64748B).withValues(alpha: 0.08),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -45,6 +47,7 @@ class ChatInputBar extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            // Context Attachment Button
             Container(
               margin: const EdgeInsets.only(bottom: 2),
               decoration: BoxDecoration(
@@ -57,57 +60,66 @@ class ChatInputBar extends StatelessWidget {
                   color: AppColors.primary,
                   size: 22,
                 ),
-                tooltip: 'Attach Context',
+                tooltip: 'Attach Clinical Context',
                 onPressed: onAttachContext,
               ),
             ),
             const SizedBox(width: 8),
+
+            // Text Input Field
             Expanded(
-              child: TextField(
-                controller: controller,
-                maxLines: 4,
-                minLines: 1,
-                style: context.textTheme.bodyMedium?.copyWith(
-                  fontSize: 15,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Ask your AI health companion...',
-                  hintStyle: TextStyle(
-                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                    fontSize: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.xxl),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.xxl),
-                    borderSide: BorderSide(
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.xxl),
-                    borderSide: const BorderSide(
-                      color: AppColors.tertiary,
-                      width: 1.8,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(AppRadius.xxl),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
                   ),
                 ),
-                onSubmitted: (val) {
-                  if (val.trim().isNotEmpty && !isGenerating) {
-                    onSend();
-                  }
-                },
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        maxLines: 4,
+                        minLines: 1,
+                        style: context.textTheme.bodyMedium?.copyWith(
+                          fontSize: 14.5,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Ask your AI clinical companion...',
+                          hintStyle: TextStyle(
+                            color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                            fontSize: 14,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onSubmitted: (val) {
+                          if (val.trim().isNotEmpty && !isGenerating) {
+                            onSend();
+                          }
+                        },
+                      ),
+                    ),
+                    if (hasInputText)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                        tooltip: 'Clear text',
+                        onPressed: () => controller.clear(),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
+
+            // Mic or Send Button
             if (!hasInputText)
               Container(
                 margin: const EdgeInsets.only(bottom: 2),

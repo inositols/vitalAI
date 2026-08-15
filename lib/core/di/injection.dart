@@ -1,7 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:vitalai/features/auth/data/repositories/auth_repository_impl.dart';
-import 'package:vitalai/features/settings/presentation/bloc/settings_event.dart';
+import 'package:vitalai/features/settings/presentation/bloc/settings_state.dart';
 import '../database/db_service.dart';
 import '../notifications/notification_service.dart';
 import '../services/ai_service.dart';
@@ -40,31 +41,45 @@ Future<void> setupLocator() async {
   await notificationService.init();
   locator.registerSingleton<NotificationService>(notificationService);
 
-  // 4. Settings Block (pre-loaded before other repositories)
-  final settingsBloc = SettingsBloc(
-    secureStorage: locator<FlutterSecureStorage>(),
+  // 4. Preload Settings so frame 0 matches user's saved theme & units (Zero Flash)
+  final themeStr = await secureStorage.read(key: 'theme_mode');
+  final hcStr = await secureStorage.read(key: 'is_high_contrast');
+  final tempUnit = await secureStorage.read(key: 'temp_unit') ?? 'C';
+  final glucoseUnit = await secureStorage.read(key: 'glucose_unit') ?? 'mg/dL';
+  final weightUnit = await secureStorage.read(key: 'weight_unit') ?? 'kg';
+  final lang = await secureStorage.read(key: 'language_code') ?? 'en';
+  final consentStr = await secureStorage.read(key: 'ai_consent');
+  final apiKey = await secureStorage.read(key: 'api_key') ?? '';
+
+  ThemeMode themeMode = ThemeMode.light;
+  if (themeStr == 'dark') themeMode = ThemeMode.dark;
+  if (themeStr == 'system') themeMode = ThemeMode.system;
+  if (themeStr == 'light') themeMode = ThemeMode.light;
+
+  final initialSettingsState = SettingsState(
+    themeMode: themeMode,
+    isHighContrast: hcStr == 'true',
+    tempUnit: tempUnit,
+    glucoseUnit: glucoseUnit,
+    weightUnit: weightUnit,
+    languageCode: lang,
+    aiConsent: consentStr == 'true',
+    apiKey: apiKey,
   );
-  settingsBloc.add(SettingsLoadRequested());
-  // Wait brief moment for initial loading
-  await settingsBloc.stream
-      .firstWhere(
-        (state) => state.apiKey.isNotEmpty || state.tempUnit.isNotEmpty,
-      )
-      .timeout(
-        const Duration(milliseconds: 300),
-        onTimeout: () => settingsBloc.state,
-      );
+
+  final settingsBloc = SettingsBloc(
+    secureStorage: secureStorage,
+    initialState: initialSettingsState,
+  );
   locator.registerSingleton<SettingsBloc>(settingsBloc);
 
   // 5. AI Gemini Client
   const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
-  final initialKey = settingsBloc.state.apiKey.isNotEmpty
-      ? settingsBloc.state.apiKey
-      : geminiApiKey;
+  final initialKey = apiKey.isNotEmpty ? apiKey : geminiApiKey;
   final aiService = AiService(initialKey);
   locator.registerSingleton<AiService>(aiService);
 
-  // 6. Authentication Core
+  // 6. Authentication Core (Preload stored session for seamless startup)
   final authRepository = AuthRepositoryImpl(locator<FlutterSecureStorage>());
   await authRepository.init();
   locator.registerSingleton<AuthRepository>(authRepository);
@@ -115,6 +130,6 @@ Future<void> setupLocator() async {
     () => RemindersBloc(repository: locator<ReminderRepository>()),
   );
 
-  // 11. Initialize Database (After registering all module schemas)
+  // 11. Initialize Database
   await dbService.init();
 }

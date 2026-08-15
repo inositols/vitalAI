@@ -24,8 +24,8 @@ class AiService {
 
     if (hasValidKey) {
       _model = GenerativeModel(
-        model: 'gemini-2.5-flash',
-        apiKey: _apiKey!,
+        model: 'gemini-1.5-flash',
+        apiKey: _apiKey!.trim(),
         systemInstruction: Content.system(GenUiPromptBuilder.buildSystemInstruction()),
         requestOptions: const RequestOptions(apiVersion: 'v1beta'),
       );
@@ -64,8 +64,18 @@ class AiService {
       return "Consent Required: Please enable AI sharing in your settings before asking the AI assistant.";
     }
 
+    // Auto-resolve API key from SettingsBloc if not yet configured
+    if (_model == null && locator.isRegistered<SettingsBloc>()) {
+      final settingsKey = locator<SettingsBloc>().state.apiKey;
+      if (settingsKey.trim().isNotEmpty) {
+        updateApiKey(settingsKey.trim());
+      }
+    }
+
+    final cacheKey = "${healthContext?.patientId ?? 0}_${prompt.trim().toLowerCase()}";
+
     // 1. Check response cache
-    final cached = await GenUiCacheService.getCachedResponse(prompt);
+    final cached = await GenUiCacheService.getCachedResponse(cacheKey);
     if (cached != null && cached.isNotEmpty) {
       return cached;
     }
@@ -84,7 +94,7 @@ class AiService {
 
     if (_model == null) {
       final fallback = _generateMockFallback(prompt, healthContext);
-      await GenUiCacheService.cacheResponse(prompt, fallback);
+      await GenUiCacheService.cacheResponse(cacheKey, fallback);
       return fallback;
     }
 
@@ -97,24 +107,27 @@ class AiService {
 
       if (history != null && history.isNotEmpty) {
         buffer.writeln('Recent Conversation History:');
-        for (var msg in history.take(6)) {
+        // Take the latest 8 messages
+        final recentHistory = history.length > 8 ? history.sublist(history.length - 8) : history;
+        for (var msg in recentHistory) {
           buffer.writeln('${msg.sender.toUpperCase()}: ${msg.content}');
         }
         buffer.writeln('-----------------------------------');
       }
 
       buffer.writeln('User Question: $prompt');
+      buffer.writeln('Instructions: Provide an accurate, direct, and compassionate clinical answer tailored specifically to the prompt and the patient\'s records above.');
 
       final content = [Content.text(buffer.toString())];
       final response = await _model!.generateContent(content);
       final textResult = response.text ?? "I was unable to analyze the data. Please try again.";
 
-      await GenUiCacheService.cacheResponse(prompt, textResult);
+      await GenUiCacheService.cacheResponse(cacheKey, textResult);
       return textResult;
     } catch (e) {
       debugPrint("Gemini API Error: $e");
       final fallback = _generateMockFallback(prompt, healthContext);
-      await GenUiCacheService.cacheResponse(prompt, fallback);
+      await GenUiCacheService.cacheResponse(cacheKey, fallback);
       return fallback;
     }
   }
@@ -174,311 +187,499 @@ class AiService {
     final lower = prompt.toLowerCase();
     final patientName = context?.patientName ?? 'Patient';
 
-    // Stress / Anxiety intent
-    if (lower.contains("stress") || lower.contains("anxiety")) {
-      return "Stress triggers the sympathetic nervous system, causing adrenaline release that elevates heart rate and blood pressure.\n\n"
+    // Extract dynamic real patient baseline metrics
+    final bpSys = context?.bpSystolicTrend.average?.round() ?? 122;
+    final bpDia = context?.bpDiastolicTrend.average?.round() ?? 80;
+    final bpHigh = context?.bpSystolicTrend.highest?.round() ?? 128;
+    final bpLow = context?.bpSystolicTrend.lowest?.round() ?? 118;
+    final bpDirection = context?.bpSystolicTrend.direction ?? 'Stable';
+
+    final glucoseAvg = context?.glucoseTrend.average != null
+        ? context!.glucoseTrend.average!.toStringAsFixed(1)
+        : '95';
+    final glucoseDirection = context?.glucoseTrend.direction ?? 'Stable';
+
+    final pulseAvg = context?.pulseTrend.average?.round() ?? 72;
+    final spo2Avg = context?.spo2Trend.average != null
+        ? context!.spo2Trend.average!.toStringAsFixed(1)
+        : '98';
+
+    final conditionsStr = context != null && context.conditions.isNotEmpty
+        ? context.conditions.join(', ')
+        : 'No chronic conditions logged';
+
+    final rxStr = context != null && context.medications.isNotEmpty
+        ? context.medications.join(', ')
+        : 'No active prescriptions recorded';
+
+    // -------------------------------------------------------------
+    // INTENT 1: Specific Blood Pressure Reading entered in prompt (e.g. 145/90)
+    // -------------------------------------------------------------
+    final bpRegex = RegExp(r'(\d{2,3})\s*[/]\s*(\d{2,3})');
+    final bpMatch = bpRegex.firstMatch(prompt);
+    if (bpMatch != null) {
+      final inputSys = int.tryParse(bpMatch.group(1)!) ?? bpSys;
+      final inputDia = int.tryParse(bpMatch.group(2)!) ?? bpDia;
+
+      String category = 'Normal';
+      String recommendation = 'This reading is within healthy resting thresholds. Maintain your regular schedule.';
+      String status = 'normal';
+
+      if (inputSys >= 180 || inputDia >= 120) {
+        return "⚠️ **IMPORTANT EMERGENCY NOTICE:** A blood pressure reading of **$inputSys/$inputDia mmHg** represents a **Hypertensive Crisis**. If accompanied by chest discomfort, shortness of breath, or numbness, seek emergency medical care immediately.";
+      } else if (inputSys >= 140 || inputDia >= 90) {
+        category = 'Stage 2 Hypertension';
+        recommendation = 'This reading is noticeably elevated compared to your 30-day baseline ($bpSys/$bpDia mmHg). Rest for 5 minutes and take a second reading.';
+        status = 'high';
+      } else if (inputSys >= 130 || inputDia >= 80) {
+        category = 'Stage 1 Hypertension';
+        recommendation = 'This reading falls in the Stage 1 hypertension zone. Monitor sodium intake and record your evening reading.';
+        status = 'elevated';
+      } else if (inputSys >= 120 && inputDia < 80) {
+        category = 'Elevated Blood Pressure';
+        recommendation = 'Your systolic number is slightly above optimal baseline. Keep tracking morning and evening.';
+        status = 'elevated';
+      }
+
+      return "Hello **$patientName** 👋, analyzing your reading of **$inputSys/$inputDia mmHg**:\n\n"
+          "• **Classification:** **$category**\n"
+          "• **Comparison to Baseline:** Your 30-day average is **$bpSys/$bpDia mmHg** ($bpDirection).\n"
+          "• **Clinical Guidance:** $recommendation\n\n"
           "```json\n"
           "{\n"
-          "  \"type\": \"education_card\",\n"
-          "  \"title\": \"Stress & Heart Rate\",\n"
-          "  \"definition\": \"Acute stress activates the sympathetic nervous system, temporarily elevating cardiac output and vascular resistance.\"\n"
+          "  \"type\": \"blood_pressure_card\",\n"
+          "  \"title\": \"Entered Blood Pressure\",\n"
+          "  \"value\": \"$inputSys/$inputDia\",\n"
+          "  \"unit\": \"mmHg\",\n"
+          "  \"status\": \"$status\",\n"
+          "  \"subtitle\": \"Category: $category\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational assessment only. Consult your physician for treatment plans.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 2: Specific Symptoms (Headache, Dizziness, Palpitations, Swelling, Fatigue)
+    // -------------------------------------------------------------
+    if (lower.contains("headache") || lower.contains("migraine") || lower.contains("head hurt")) {
+      return "Hello **$patientName**, evaluating your headache in relation to your health profile:\n\n"
+          "• **Vascular Link:** Headaches can occasionally accompany sudden elevations in blood pressure (your baseline: **$bpSys/$bpDia mmHg**).\n"
+          "• **Active Prescriptions:** $rxStr.\n"
+          "• **Action Steps:**\n"
+          "  1. Log a resting blood pressure reading right now to verify if it is elevated.\n"
+          "  2. Hydrate with water and rest in a dimly lit room.\n"
+          "  3. If the headache is sudden, severe ('thunderclap'), or accompanied by vision changes, seek immediate medical care.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Headache & BP Check\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Correlates symptom onset with current arterial pressure.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Seek emergency care if accompanied by neurological symptoms.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational analysis only.*";
+    }
+
+    if (lower.contains("dizzy") || lower.contains("dizziness") || lower.contains("lightheaded") || lower.contains("vertigo")) {
+      return "Hello **$patientName**, evaluating your dizziness:\n\n"
+          "• **Clinical Considerations:** Dizziness can result from rapid postural changes (orthostatic hypotension), dehydration, or medication timing ($rxStr).\n"
+          "• **Your Baseline:** Blood pressure average is **$bpSys/$bpDia mmHg** and pulse is **$pulseAvg BPM**.\n"
+          "• **Recommendations:**\n"
+          "  1. Sit or lie down immediately to prevent falls.\n"
+          "  2. Drink 1–2 glasses of water.\n"
+          "  3. Stand up slowly when transitioning from sitting or lying positions.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Postural Caution & Hydration\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Prevents syncopal episodes and stabilizes blood volume.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Consult your doctor if dizziness is frequent or accompanied by fainting.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational analysis only.*";
+    }
+
+    if (lower.contains("palpitation") || lower.contains("racing heart") || lower.contains("fluttering") || lower.contains("fast heart")) {
+      return "Hello **$patientName**, regarding your heart palpitations:\n\n"
+          "• **Heart Rate Context:** Your recorded resting pulse average is **$pulseAvg BPM**.\n"
+          "• **Common Triggers:** Excess caffeine, dehydration, acute stress, electrolyte shifts, or lack of sleep.\n"
+          "• **Immediate Protocol:**\n"
+          "  1. Practice 4-7-8 slow diaphragmatic breathing to stimulate the vagus nerve.\n"
+          "  2. Check and log your current pulse rate and oxygen saturation.\n"
+          "  3. Avoid stimulants (coffee, energy drinks, nicotine).\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"pulse_card\",\n"
+          "  \"title\": \"Resting Pulse Baseline\",\n"
+          "  \"value\": \"$pulseAvg\",\n"
+          "  \"unit\": \"BPM\",\n"
+          "  \"status\": \"normal\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: If palpitations are accompanied by chest pain or shortness of breath, call 911 immediately.*";
+    }
+
+    if (lower.contains("swelling") || lower.contains("edema") || lower.contains("swollen feet") || lower.contains("puffy")) {
+      return "Hello **$patientName**, evaluating peripheral swelling (edema):\n\n"
+          "• **Clinical Context:** Swelling in the lower extremities can relate to sodium retention, venous insufficiency, or medication side effects (such as calcium channel blockers like Amlodipine).\n"
+          "• **Your Prescriptions:** $rxStr.\n"
+          "• **Action Steps:**\n"
+          "  1. Elevate your legs above heart level for 15–20 minutes.\n"
+          "  2. Reduce dietary sodium to under 1,500 mg daily.\n"
+          "  3. Note if the swelling is bilateral and discuss with your prescribing physician.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Leg Elevation & Sodium Reduction\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Promotes venous return and minimizes fluid accumulation.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Report new or worsening swelling to your doctor.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational analysis only.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 3: Diet & Nutrition (Salt/Sodium, Potassium/Bananas, Coffee/Caffeine, Alcohol)
+    // -------------------------------------------------------------
+    if (lower.contains("salt") || lower.contains("sodium")) {
+      return "Hello **$patientName**, dietary sodium directly affects blood pressure:\n\n"
+          "• **Physiological Impact:** Excess sodium causes water retention, increasing vascular volume and raising arterial pressure against vessel walls.\n"
+          "• **Your Vitals:** Your 30-day systolic average is **$bpSys mmHg**.\n"
+          "• **AHA Guidelines:** Restrict daily sodium to **< 1,500 mg** (approx. 2/3 teaspoon of salt).\n"
+          "• **Tips:** Cook with garlic, herbs, and lemon instead of table salt; rinse canned vegetables.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Sodium Reduction Strategy\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Reducing sodium by 1,000 mg/day can lower systolic BP by 5–6 mmHg.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Always check nutrition labels for hidden sodium in processed foods.\"\n"
           "}\n"
           "```\n\n"
           "*Disclaimer: Educational tracking only.*";
     }
 
-    // Water / Hydration intent
-    if (lower.contains("water") || lower.contains("hydration") || lower.contains("dehydrat")) {
-      return "Maintaining proper hydration directly influences your Blood Volume and cardiovascular workload:\n\n"
+    if (lower.contains("banana") || lower.contains("potassium")) {
+      return "Hello **$patientName**, potassium plays a critical counter-balance to sodium in vascular health:\n\n"
+          "• **Mechanism:** Potassium promotes renal sodium excretion and helps relax arterial walls.\n"
+          "• **Prescription Check:** If taking ACE inhibitors (e.g. Lisinopril) or ARBs (e.g. Losartan), consult your doctor before taking high-dose potassium supplements, as these medications retain potassium.\n"
+          "• **Dietary Sources:** Bananas, avocados, spinach, sweet potatoes, and white beans.\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Hydration & Blood Volume\",\n"
+          "  \"title\": \"Potassium-Rich Foods\",\n"
           "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Optimal Blood Volume supports smooth systemic circulation and prevents dehydration-induced tachycardia.\",\n"
-          "  \"relatedMetric\": \"Pulse & Blood Pressure\",\n"
-          "  \"suggestedFollowUp\": [\"Drink 2.5L water daily\", \"Limit caffeine\"],\n"
-          "  \"disclaimer\": \"Educational tracking only.\"\n"
+          "  \"reason\": \"Balances intracellular electrolytes to support smooth vascular dilation.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Avoid potassium supplements without prior renal lab testing.\"\n"
           "}\n"
           "```\n\n"
-          "*Disclaimer: Educational tracking advice.*";
+          "*Disclaimer: Educational tracking only.*";
     }
 
-    // Doctor Visit / Questions for Doctor Intent
-    if (lower.contains("doctor") || lower.contains("physician") || lower.contains("questions should i ask")) {
-      return "Here is a tailored preparation checklist for your upcoming doctor visit:\n\n"
+    if (lower.contains("coffee") || lower.contains("caffeine") || lower.contains("tea")) {
+      return "Hello **$patientName**, regarding caffeine and your vitals:\n\n"
+          "• **Acute Effect:** Caffeine can cause a temporary spike in blood pressure (5–10 mmHg) and pulse for 1–3 hours due to adenosine receptor blockade.\n"
+          "• **Your Baseline:** Resting BP **$bpSys/$bpDia mmHg**, pulse **$pulseAvg BPM**.\n"
+          "• **Recommendation:** Do not consume caffeine within 30 minutes of measuring your blood pressure for accurate baseline readings.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Caffeine Measurement Protocol\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Prevents temporary stimulant-induced vital elevation during logging.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Limit intake to 1–2 cups daily if prone to palpitations.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    if (lower.contains("alcohol") || lower.contains("beer") || lower.contains("wine") || lower.contains("drink")) {
+      return "Hello **$patientName**, alcohol intake directly impacts vascular regulation:\n\n"
+          "• **Hemodynamics:** While alcohol may cause temporary vasodilation initially, regular or binge consumption increases renin-angiotensin activity, raising blood pressure.\n"
+          "• **Prescription Caution:** Alcohol can amplify the blood-pressure-lowering effects of antihypertensives ($rxStr), increasing dizziness risks.\n"
+          "• **Recommendation:** Limit alcohol to no more than 1 drink per day for women, 2 for men.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Alcohol Moderation\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Reduces cardiovascular strain and avoids drug-alcohol interactions.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Do not consume alcohol immediately after taking blood pressure medications.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 4: Lifestyle, Exercise, Stress & Sleep
+    // -------------------------------------------------------------
+    if (lower.contains("exercise") || lower.contains("workout") || lower.contains("walking") || lower.contains("running") || lower.contains("gym")) {
+      return "Hello **$patientName**, regular physical activity is one of the most effective ways to optimize cardiovascular health:\n\n"
+          "• **Target:** 150 minutes of moderate aerobic exercise (brisk walking, cycling, swimming) per week.\n"
+          "• **Expected Benefit:** Can reduce systolic blood pressure by **5–8 mmHg** and lower resting pulse.\n"
+          "• **Safety Note:** Avoid heavy isometric straining if BP is currently elevated above 140/90. Warm up and cool down for 5 minutes.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Aerobic Exercise Routine\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Strengthens cardiac muscle and enhances nitric oxide arterial dilation.\",\n"
+          "  \"relatedMetric\": \"Heart Rate\",\n"
+          "  \"disclaimer\": \"Consult your physician before initiating vigorous exercise programs.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    if (lower.contains("sleep") || lower.contains("insomnia") || lower.contains("tired")) {
+      return "Hello **$patientName**, sleep quality is a key pillar of physiological recovery:\n\n"
+          "• **Nocturnal Dipping:** During deep sleep, blood pressure naturally decreases by 10–20% ('nocturnal dipping'). Sleep deprivation disrupts this, sustaining high 24-hour pressure.\n"
+          "• **Target:** 7 to 9 hours of uninterrupted sleep nightly.\n"
+          "• **Sleep Hygiene:** Avoid screens 30 minutes before bed; keep bedroom cool (65–68°F / 18–20°C).\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Sleep Hygiene & Nocturnal Recovery\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Supports autonomic nervous system balance and nocturnal BP dipping.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Screen for sleep apnea if you snore heavily or wake up unrefreshed.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    if (lower.contains("stress") || lower.contains("anxiety") || lower.contains("calm")) {
+      return "Hello **$patientName**, psychological and physical stress triggers the sympathetic nervous system, causing catecholamine release that elevates heart rate and temporarily contracts vascular walls:\n\n"
+          "• **Heart Rate Response:** Adrenaline increases sinoatrial node firing rate, elevating your pulse.\n"
+          "• **Vascular Response:** Vasoconstriction increases systemic vascular resistance, causing temporary BP spikes.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Stress & Heart Rate Management\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Diaphragmatic breathing activates the parasympathetic response to normalize heart rate.\",\n"
+          "  \"relatedMetric\": \"Heart Rate\",\n"
+          "  \"disclaimer\": \"Practice 5 minutes of slow paced breathing if pulse exceeds baseline.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational content only.*";
+    }
+
+    if (lower.contains("water") || lower.contains("hydration") || lower.contains("dehydrat")) {
+      return "Hello **$patientName**, adequate hydration directly influences Blood Volume and hemodynamic stability:\n\n"
+          "• **Blood Volume Maintenance:** Dehydration reduces total circulating blood volume, potentially causing compensatory tachycardia and orthostatic hypotension.\n"
+          "• **Optimal Target:** 2 to 2.5 liters of water daily supports steady capillary perfusion.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"Daily Hydration Target\",\n"
+          "  \"priority\": \"medium\",\n"
+          "  \"reason\": \"Maintains optimal blood volume and prevents false vital fluctuations.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Consult your physician if you are on restricted fluid intake for kidney or heart conditions.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational content only.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 5: Specific Prescriptions & Medication Inquiries
+    // -------------------------------------------------------------
+    if (lower.contains("medication") || lower.contains("prescription") || lower.contains("rx") || lower.contains("dose") || lower.contains("pill") || lower.contains("drug")) {
+      return "Hello **$patientName**, reviewing your recorded medications:\n\n"
+          "• **Active Prescriptions:** **$rxStr**\n"
+          "• **Diagnosed Profile:** $conditionsStr\n\n"
+          "**Clinical Guidance:**\n"
+          "1. Take prescribed medications consistently at the same scheduled time each day.\n"
+          "2. Avoid abrupt discontinuation or dosage modification without physician approval.\n"
+          "3. Log your resting blood pressure and heart rate 30–60 minutes after dosing to track therapeutic effectiveness.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"reminder_card\",\n"
+          "  \"title\": \"Medication Adherence\",\n"
+          "  \"time\": \"08:00 AM\",\n"
+          "  \"dosage\": \"$rxStr\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only. Consult your pharmacist or doctor regarding drug interactions.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 6: Blood Pressure Lowering & DASH Guidance
+    // -------------------------------------------------------------
+    if ((lower.contains("lower") || lower.contains("reduce") || lower.contains("lifestyle") || lower.contains("improve") || lower.contains("tips")) &&
+        (lower.contains("blood pressure") || lower.contains("bp") || lower.contains("hypertension"))) {
+      return "Hello **$patientName** 👋, here are proven clinical strategies to help lower and stabilize blood pressure:\n\n"
+          "1. **DASH Eating Plan:** Emphasize fruits, vegetables, whole grains, and lean proteins while minimizing saturated fats.\n"
+          "2. **Sodium Reduction:** Aim for less than 1,500–2,000 mg of sodium daily.\n"
+          "3. **Regular Aerobic Activity:** 150 minutes of moderate exercise per week can lower systolic BP by 5–8 mmHg.\n"
+          "4. **Consistent Monitoring:** Take your reading at the same time every morning.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"recommendation_card\",\n"
+          "  \"title\": \"DASH & Sodium Management\",\n"
+          "  \"priority\": \"high\",\n"
+          "  \"reason\": \"Evidence-based lifestyle interventions can reduce systolic BP by up to 10 mmHg.\",\n"
+          "  \"relatedMetric\": \"Blood Pressure\",\n"
+          "  \"disclaimer\": \"Always consult your doctor before modifying medication or starting intensive exercise.\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only. Discuss personal vitals with your physician.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 7: General Blood Pressure Overview
+    // -------------------------------------------------------------
+    if (lower.contains("blood pressure") || lower.contains("bp") || lower.contains("hypertension")) {
+      String clinicalCategory = 'Normal';
+      if (bpSys >= 140 || bpDia >= 90) {
+        clinicalCategory = 'Stage 2 Hypertension';
+      } else if (bpSys >= 130 || bpDia >= 80) {
+        clinicalCategory = 'Stage 1 Hypertension';
+      } else if (bpSys >= 120 && bpDia < 80) {
+        clinicalCategory = 'Elevated Blood Pressure';
+      }
+
+      return "Hello **$patientName** 👋, here is your personalized Blood Pressure assessment based on your ${context?.totalVitalsCount ?? 0} recorded logs:\n\n"
+          "• **30-Day Average:** **$bpSys/$bpDia mmHg** ($clinicalCategory)\n"
+          "• **Recorded Range:** Minimum $bpLow mmHg to Maximum $bpHigh mmHg\n"
+          "• **Trajectory:** Trajectory is currently **$bpDirection**.\n\n"
+          "${bpSys >= 130 ? 'Your systolic average is elevated. Consider monitoring your daily sodium intake and taking rested morning readings.' : 'Your resting blood pressure is within optimal physiological thresholds.'}\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"blood_pressure_card\",\n"
+          "  \"title\": \"Blood Pressure Average\",\n"
+          "  \"value\": \"$bpSys/$bpDia\",\n"
+          "  \"unit\": \"mmHg\",\n"
+          "  \"status\": \"${bpSys >= 130 ? 'elevated' : 'normal'}\",\n"
+          "  \"subtitle\": \"30-Day Trend: $bpDirection\"\n"
+          "}\n"
+          "```\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"trend_chart\",\n"
+          "  \"title\": \"Systolic BP Trajectory\",\n"
+          "  \"metricType\": \"bp\",\n"
+          "  \"dataPoints\": [$bpLow, ${bpSys - 2}, $bpSys, ${bpSys + 2}, $bpHigh],\n"
+          "  \"labels\": [\"Week 1\", \"Week 2\", \"Week 3\", \"Week 4\", \"Latest\"],\n"
+          "  \"summary\": \"Overall trajectory: $bpDirection\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only. Discuss personal vitals with your physician.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 8: Blood Glucose & Diabetes Query
+    // -------------------------------------------------------------
+    if (lower.contains("glucose") || lower.contains("sugar") || lower.contains("diabetes") || lower.contains("a1c")) {
+      final gluNum = double.tryParse(glucoseAvg) ?? 95;
+      final isElevated = gluNum >= 126;
+
+      return "Hello **$patientName**, here is your personalized Blood Glucose evaluation:\n\n"
+          "• **Average Reading:** **$glucoseAvg mg/dL**\n"
+          "• **Pattern:** Your glycemic trajectory is **$glucoseDirection**.\n"
+          "• **Assessment:** ${isElevated ? 'Your readings are slightly above standard fasting thresholds. Review meal timing.' : 'Your readings demonstrate steady blood sugar control.'}\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"glucose_card\",\n"
+          "  \"title\": \"Blood Glucose Average\",\n"
+          "  \"value\": \"$glucoseAvg\",\n"
+          "  \"unit\": \"mg/dL\",\n"
+          "  \"status\": \"${isElevated ? 'elevated' : 'normal'}\",\n"
+          "  \"subtitle\": \"Trend: $glucoseDirection\"\n"
+          "}\n"
+          "```\n\n"
+          "*Disclaimer: Educational tracking only.*";
+    }
+
+    // -------------------------------------------------------------
+    // INTENT 9: Doctor Visit Preparation / Appointment Guide
+    // -------------------------------------------------------------
+    if (lower.contains("doctor") || lower.contains("physician") || lower.contains("questions") || lower.contains("appointment")) {
+      return "Here is a personalized consultation guide prepared for **$patientName**'s next clinic visit:\n\n"
           "**Top 3 Questions to Ask Your Doctor:**\n"
-          "1. Are my blood pressure and glucose readings within target range?\n"
-          "2. Should I adjust my daily physical activity or dietary sodium limits?\n"
-          "3. What vital thresholds should trigger an immediate follow-up visit?\n\n"
+          "1. Are my blood pressure readings ($bpSys/$bpDia mmHg) within target parameters for my health profile?\n"
+          "2. Given my active prescriptions ($rxStr), are there specific timing or lab checks we should schedule?\n"
+          "3. What specific symptoms should prompt an immediate follow-up visit?\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"report_card\",\n"
           "  \"patientName\": \"$patientName\",\n"
           "  \"reportDate\": \"August 2026\",\n"
-          "  \"summaryText\": \"Top 3 Questions to Ask Your Doctor during your upcoming consultation.\",\n"
+          "  \"summaryText\": \"Comprehensive vitals report generated for physician consultation.\",\n"
           "  \"vitalsOverview\": {\n"
-          "    \"Blood Pressure\": \"122/80 mmHg\",\n"
-          "    \"Glucose Average\": \"95 mg/dL\"\n"
+          "    \"Blood Pressure\": \"$bpSys/$bpDia mmHg\",\n"
+          "    \"Glucose Avg\": \"$glucoseAvg mg/dL\",\n"
+          "    \"Pulse Rate\": \"$pulseAvg BPM\",\n"
+          "    \"SpO2\": \"$spo2Avg%\"\n"
           "  },\n"
           "  \"aiObservations\": [\n"
-          "    \"Ask if target resting thresholds remain appropriate.\",\n"
-          "    \"Review 30-day hemodynamic trend stability.\"\n"
+          "    \"Hemodynamic trajectory: $bpDirection.\",\n"
+          "    \"Active conditions: $conditionsStr.\"\n"
           "  ],\n"
           "  \"pdfDownloadRoute\": \"/history\"\n"
           "}\n"
           "```\n\n"
-          "*Disclaimer: Personalized personal tracking checklist only. Please discuss medical questions directly with your doctor.*";
+          "*Disclaimer: Clinical consultation guide for personal records only.*";
     }
 
-    // Dynamic Health Summary Intent
-    if (lower.contains("today's health summary") || lower.contains("health summary") || lower.contains("overview today")) {
-      return "Here is your unified health summary for **$patientName** today:\n\n"
+    // -------------------------------------------------------------
+    // INTENT 10: Health Summary / Overview
+    // -------------------------------------------------------------
+    if (lower.contains("summary") || lower.contains("today") || lower.contains("how am i") || lower.contains("overview")) {
+      return "Here is your unified clinical overview for **$patientName**:\n\n"
+          "• **Blood Pressure:** **$bpSys/$bpDia mmHg** ($bpDirection)\n"
+          "• **Blood Glucose:** **$glucoseAvg mg/dL** ($glucoseDirection)\n"
+          "• **Heart Rate & Oxygen:** **$pulseAvg BPM** • **$spo2Avg% SpO₂**\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"health_summary_card\",\n"
           "  \"title\": \"Today's Health Overview\",\n"
-          "  \"value\": \"Stable & On Track\",\n"
-          "  \"subtitle\": \"All 4 core vitals measured within target operational thresholds today.\"\n"
+          "  \"value\": \"$bpDirection Hemodynamics\",\n"
+          "  \"subtitle\": \"Avg BP $bpSys/$bpDia mmHg • Glucose $glucoseAvg mg/dL\"\n"
           "}\n"
           "```\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"blood_pressure_card\",\n"
           "  \"title\": \"Blood Pressure\",\n"
-          "  \"value\": \"120/80\",\n"
+          "  \"value\": \"$bpSys/$bpDia\",\n"
           "  \"unit\": \"mmHg\",\n"
-          "  \"status\": \"normal\",\n"
-          "  \"subtitle\": \"Resting morning measurement\"\n"
+          "  \"status\": \"${bpSys >= 130 ? 'elevated' : 'normal'}\"\n"
           "}\n"
           "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"glucose_card\",\n"
-          "  \"title\": \"Fasting Glucose\",\n"
-          "  \"value\": \"95\",\n"
-          "  \"unit\": \"mg/dL\",\n"
-          "  \"status\": \"normal\",\n"
-          "  \"subtitle\": \"Pre-breakfast level\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"pulse_card\",\n"
-          "  \"title\": \"Resting Pulse Rate\",\n"
-          "  \"value\": \"72\",\n"
-          "  \"unit\": \"bpm\",\n"
-          "  \"status\": \"normal\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"temperature_card\",\n"
-          "  \"title\": \"Body Temperature\",\n"
-          "  \"value\": \"98.6\",\n"
-          "  \"unit\": \"°F\",\n"
-          "  \"status\": \"normal\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"ai_insight_card\",\n"
-          "  \"title\": \"Daily AI Clinical Insight\",\n"
-          "  \"insight\": \"Vitals show excellent hemodynamic stability. Maintaining low dietary sodium will keep blood pressure consistent.\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"reminder_card\",\n"
-          "  \"title\": \"Evening Blood Pressure Check\",\n"
-          "  \"time\": \"08:00 PM\",\n"
-          "  \"dosage\": \"Rest 5 mins before reading\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: VitalAI responses are for educational tracking only and do not replace professional medical advice.*";
+          "*Disclaimer: VitalAI responses are for educational tracking.*";
     }
 
-    // Educational Intent ("What is systolic pressure?")
-    if (lower.contains("systolic") || lower.contains("what is blood pressure") || lower.contains("diastolic") || lower.contains("explain bp")) {
-      return "Blood pressure measures the force of circulating blood against the walls of blood vessels.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"education_card\",\n"
-          "  \"title\": \"Systolic Pressure Explained\",\n"
-          "  \"definition\": \"Systolic blood pressure (the top number) measures the pressure exerted against arterial walls when your heart ventricles contract and pump oxygenated blood throughout the body.\",\n"
-          "  \"normalRange\": \"90 - 120 mmHg\",\n"
-          "  \"illustrationIcon\": \"favorite\",\n"
-          "  \"relatedReading\": [\"Diastolic Pressure\", \"Pulse Pressure\", \"DASH Diet\"],\n"
-          "  \"learnMoreUrl\": \"https://www.heart.org\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational content only. Consult your physician for personal medical questions.*";
-    }
-
-    // AI Recommendation Intent ("How can I lower my blood pressure?")
-    if (lower.contains("lower") || lower.contains("recommend") || lower.contains("diet") || lower.contains("sodium")) {
-      return "Here are structured AI clinical recommendations for optimizing your vitals:\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"DASH Eating Plan & Hydration Plan\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Following the DASH Eating Plan and maintaining daily hydration reduces arterial stiffness and lowers systolic pressure.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure & Pulse Rate\",\n"
-          "  \"suggestedFollowUp\": [\n"
-          "    \"Adopt the DASH Eating Plan rich in potassium and fiber\",\n"
-          "    \"Drink at least 2.5 Liters of water daily\",\n"
-          "    \"Keep dietary sodium under 2,000 mg\",\n"
-          "    \"Log evening resting blood pressure\"\n"
-          "  ],\n"
-          "  \"disclaimer\": \"Educational tracking advice only. Consult your doctor before making major dietary adjustments.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: VitalAI advice is educational and non-diagnostic.*";
-    }
-
-    // Dynamic Report Generator Intent ("Generate my health report")
-    if (lower.contains("report") || lower.contains("generate report")) {
-      return "Here is your generated clinical health report:\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"report_card\",\n"
-          "  \"patientName\": \"$patientName\",\n"
-          "  \"reportDate\": \"August 2026\",\n"
-          "  \"summaryText\": \"Patient displays consistent resting vitals within normal physiological parameters. Blood pressure averages 122/80 mmHg with a resting heart rate of 72 bpm.\",\n"
-          "  \"vitalsOverview\": {\n"
-          "    \"Blood Pressure\": \"122/80 mmHg\",\n"
-          "    \"Glucose Average\": \"95 mg/dL\",\n"
-          "    \"Pulse Rate\": \"72 bpm\",\n"
-          "    \"SpO2\": \"98%\"\n"
-          "  },\n"
-          "  \"aiObservations\": [\n"
-          "    \"No abnormal hypertensive spikes recorded in past 30 days.\",\n"
-          "    \"Glucose levels remain steady fasting.\"\n"
-          "  ],\n"
-          "  \"pdfDownloadRoute\": \"/history\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Report generated for personal record management.*";
-    }
-
-    // Health Timeline Intent ("Show my health over the last six months")
-    if (lower.contains("timeline") || lower.contains("six months") || lower.contains("6 months") || lower.contains("history")) {
-      return "Here is your 6-Month Vitals Timeline:\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"timeline_card\",\n"
-          "  \"title\": \"6-Month Vitals Progression\",\n"
-          "  \"timeSpan\": \"Last 6 Months\",\n"
-          "  \"monthlyEvents\": [\n"
-          "    {\"month\": \"March 2026\", \"note\": \"BP 128/82 mmHg • Initiated daily walking routine\"},\n"
-          "    {\"month\": \"April 2026\", \"note\": \"BP 125/80 mmHg • Sodium intake reduced\"},\n"
-          "    {\"month\": \"May 2026\", \"note\": \"BP 122/79 mmHg • Stable resting vitals\"},\n"
-          "    {\"month\": \"June 2026\", \"note\": \"BP 120/78 mmHg • Optimal arterial elasticity\"},\n"
-          "    {\"month\": \"July 2026\", \"note\": \"BP 121/80 mmHg • Consistent glucose levels\"}\n"
-          "  ],\n"
-          "  \"highlights\": [\n"
-          "    \"Systolic pressure dropped 8 mmHg overall.\",\n"
-          "    \"Physical activity habit established.\"\n"
-          "  ]\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    // Trend Analysis Intent ("Compare my blood pressure over the last month", "Compare this week's vitals")
-    if (lower.contains("trend") || lower.contains("compare") || lower.contains("chart")) {
-      if (lower.contains("compare")) {
-        return "Here is a side-by-side comparison of your vitals:\n\n"
-            "```json\n"
-            "{\n"
-            "  \"type\": \"comparison_chart\",\n"
-            "  \"title\": \"Vitals Comparison (This Week vs Last Week)\",\n"
-            "  \"series1Name\": \"This Week\",\n"
-            "  \"series1Data\": [120, 122, 118, 121, 119],\n"
-            "  \"series2Name\": \"Last Week\",\n"
-            "  \"series2Data\": [128, 126, 125, 124, 127],\n"
-            "  \"labels\": [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\"],\n"
-            "  \"comparisonNote\": \"Systolic blood pressure improved by an average of 6 mmHg compared to last week.\"\n"
-            "}\n"
-            "```\n\n"
-            "*Disclaimer: Educational tracking only.*";
-      }
-
-      return "Here is your Vitals Trend Chart:\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"trend_chart\",\n"
-          "  \"title\": \"Systolic BP Trend\",\n"
-          "  \"metricType\": \"bp\",\n"
-          "  \"dataPoints\": [128, 124, 122, 120, 124],\n"
-          "  \"labels\": [\"Log 1\", \"Log 2\", \"Log 3\", \"Log 4\", \"Log 5\"],\n"
-          "  \"summary\": \"Overall downward trend towards optimal resting range.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    // Multi-Widget Query ("How am I doing today?")
-    if (lower.contains("how am i doing") || lower.contains("how am i")) {
-      return "Here is your multi-card health status breakdown for **$patientName**:\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"health_summary_card\",\n"
-          "  \"title\": \"Today's Wellness Status\",\n"
-          "  \"value\": \"Optimal Hemodynamic Control\",\n"
-          "  \"subtitle\": \"No abnormal spikes detected across all recorded metrics.\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"blood_pressure_card\",\n"
-          "  \"title\": \"Blood Pressure\",\n"
-          "  \"value\": \"120/80\",\n"
-          "  \"unit\": \"mmHg\",\n"
-          "  \"status\": \"normal\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"glucose_card\",\n"
-          "  \"title\": \"Blood Glucose\",\n"
-          "  \"value\": \"95\",\n"
-          "  \"unit\": \"mg/dL\",\n"
-          "  \"status\": \"normal\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"trend_chart\",\n"
-          "  \"title\": \"Systolic BP Trend\",\n"
-          "  \"metricType\": \"bp\",\n"
-          "  \"dataPoints\": [124, 122, 120, 118, 120],\n"
-          "  \"labels\": [\"Log 1\", \"Log 2\", \"Log 3\", \"Log 4\", \"Log 5\"]\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"ai_insight_card\",\n"
-          "  \"title\": \"AI Clinical Insight\",\n"
-          "  \"insight\": \"Your resting heart rate and arterial pressure remain in sync with target wellness parameters.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    // Default Fallback with Action Button
+    // -------------------------------------------------------------
+    // INTENT 11: Direct Answer for Any Other Specific Query
+    // -------------------------------------------------------------
     final cleanQuery = prompt.replaceAll(RegExp(r'[^\w\s]'), '').trim();
-    return "Regarding your query **\"$cleanQuery\"**:\n\n"
-        "VitalAI recommends logging vitals regularly to help Gemini compose tailored GenUI insights.\n\n"
+    return "Hello **$patientName** 👋, regarding your question **\"$cleanQuery\"**:\n\n"
+        "Based on your clinical profile (${context?.age ?? 45} y/o ${context?.gender ?? 'Patient'}, Conditions: $conditionsStr):\n\n"
+        "• **Physiological Assessment:** Maintaining steady baseline hemodynamics (current 30-day BP average: **$bpSys/$bpDia mmHg**, pulse: **$pulseAvg BPM**) supports optimal organ perfusion.\n"
+        "• **Personalized Recommendation:** Keep logging your readings consistently, stay hydrated, and observe how daily activities correlate with your vitals.\n\n"
         "```json\n"
         "{\n"
-        "  \"type\": \"action_button\",\n"
-        "  \"label\": \"Log New Vitals Reading\",\n"
-        "  \"action\": \"navigate\",\n"
-        "  \"route\": \"/add-vital\"\n"
+        "  \"type\": \"recommendation_card\",\n"
+        "  \"title\": \"Clinical Monitoring Guidance\",\n"
+        "  \"priority\": \"medium\",\n"
+        "  \"reason\": \"Consistent daily data helps identify subtle physiological trends.\",\n"
+        "  \"relatedMetric\": \"Blood Pressure\",\n"
+        "  \"disclaimer\": \"Always verify unusual symptoms or reading spikes with your doctor.\"\n"
         "}\n"
         "```\n\n"
-        "*Disclaimer: Educational tracking only. Consult your physician for medical advice.*";
+        "*Disclaimer: Educational tracking only. Discuss specific questions with your physician.*";
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -10,27 +11,53 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  final Map<int, Timer> _activeTimers = {};
+  final Set<String> _firedRemindersToday = {};
+  Timer? _heartbeatTimer;
+
   Future<void> init() async {
-    tz.initializeTimeZones();
+    try {
+      tz.initializeTimeZones();
+    } catch (_) {}
+
+    _startHeartbeat();
+
     if (kIsWeb) return;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) {
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _notificationsPlugin.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
-    await requestPermissions();
+      try {
+        await _notificationsPlugin.initialize(
+          initSettings,
+          onDidReceiveNotificationResponse: _onNotificationTapped,
+        );
+        await requestPermissions();
+      } catch (e) {
+        debugPrint("LocalNotifications init error: $e");
+      }
+    }
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      final now = DateTime.now();
+      // Clean fired cache after midnight
+      if (now.hour == 0 && now.minute == 0) {
+        _firedRemindersToday.clear();
+      }
+    });
   }
 
   void _onNotificationTapped(NotificationResponse response) {
@@ -39,36 +66,47 @@ class NotificationService {
 
   Future<bool> requestPermissions() async {
     if (kIsWeb) return true;
-    final androidImplementation = _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    final androidGranted = await androidImplementation
-        ?.requestNotificationsPermission();
+    if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) {
+      return true;
+    }
 
-    final iosImplementation = _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >();
-    final iosGranted = await iosImplementation?.requestPermissions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      final androidImplementation = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      final androidGranted = await androidImplementation
+          ?.requestNotificationsPermission();
 
-    return (androidGranted ?? false) || (iosGranted ?? false);
+      final iosImplementation = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
+      final iosGranted = await iosImplementation?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      return (androidGranted ?? false) || (iosGranted ?? false);
+    } catch (_) {
+      return true;
+    }
   }
 
+  /// Show an immediate alert notification (both in-app banner and system alert).
   Future<void> showNotification({
     required int id,
     required String title,
     required String body,
     String? payload,
   }) async {
-    if (kIsWeb) {
-      _showInAppNotification(title, body);
+    _showInAppNotification(title, body);
+
+    if (kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS)) {
       return;
     }
+
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         'vitals_alerts_channel',
@@ -86,9 +124,12 @@ class NotificationService {
       ),
     );
 
-    await _notificationsPlugin.show(id, title, body, details, payload: payload);
+    try {
+      await _notificationsPlugin.show(id, title, body, details, payload: payload);
+    } catch (_) {}
   }
 
+  /// Schedule a one-shot notification after [delay].
   Future<void> scheduleNotification({
     required int id,
     required String title,
@@ -96,12 +137,15 @@ class NotificationService {
     required Duration delay,
     String? payload,
   }) async {
-    if (kIsWeb) {
-      Future.delayed(delay, () {
-        _showInAppNotification(title, body);
-      });
+    _activeTimers[id]?.cancel();
+    _activeTimers[id] = Timer(delay, () {
+      showNotification(id: id, title: title, body: body, payload: payload);
+    });
+
+    if (kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS)) {
       return;
     }
+
     final scheduledDate = tz.TZDateTime.now(tz.local).add(delay);
 
     const details = NotificationDetails(
@@ -128,23 +172,10 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         payload: payload,
       );
-    } catch (_) {
-      try {
-        await _notificationsPlugin.zonedSchedule(
-          id,
-          title,
-          body,
-          scheduledDate,
-          details,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-          payload: payload,
-        );
-      } catch (_) {}
-    }
+    } catch (_) {}
   }
 
+  /// Schedule a daily recurring reminder for a specific time of day (works on Windows, Mac, Linux, Web, Android, iOS).
   Future<void> scheduleDailyReminder({
     required int id,
     required String title,
@@ -152,19 +183,38 @@ class NotificationService {
     required int hour,
     required int minute,
   }) async {
-    if (kIsWeb) return;
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduledDate = tz.TZDateTime(
+    // 1. Calculate time until next trigger
+    final now = DateTime.now();
+    var scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    final delay = scheduled.difference(now);
+
+    // 2. Set accurate in-app / desktop timer
+    _activeTimers[id]?.cancel();
+    _activeTimers[id] = Timer(delay, () {
+      showNotification(id: id, title: title, body: body);
+      // Re-schedule for next day
+      scheduleDailyReminder(id: id, title: title, body: body, hour: hour, minute: minute);
+    });
+
+    // 3. Mobile native notification registration
+    if (kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+
+    final tzNow = tz.TZDateTime.now(tz.local);
+    var tzScheduled = tz.TZDateTime(
       tz.local,
-      now.year,
-      now.month,
-      now.day,
+      tzNow.year,
+      tzNow.month,
+      tzNow.day,
       hour,
       minute,
     );
-
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    if (tzScheduled.isBefore(tzNow)) {
+      tzScheduled = tzScheduled.add(const Duration(days: 1));
     }
 
     const details = NotificationDetails(
@@ -184,7 +234,7 @@ class NotificationService {
         id,
         title,
         body,
-        scheduledDate,
+        tzScheduled,
         details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -195,13 +245,29 @@ class NotificationService {
   }
 
   Future<void> cancelNotification(int id) async {
-    if (kIsWeb) return;
-    await _notificationsPlugin.cancel(id);
+    _activeTimers[id]?.cancel();
+    _activeTimers.remove(id);
+
+    if (kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+    try {
+      await _notificationsPlugin.cancel(id);
+    } catch (_) {}
   }
 
   Future<void> cancelAllNotifications() async {
-    if (kIsWeb) return;
-    await _notificationsPlugin.cancelAll();
+    for (var timer in _activeTimers.values) {
+      timer.cancel();
+    }
+    _activeTimers.clear();
+
+    if (kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+    try {
+      await _notificationsPlugin.cancelAll();
+    } catch (_) {}
   }
 
   Future<void> scheduleBPRecheckReminder() async {

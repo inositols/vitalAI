@@ -7,6 +7,7 @@ import 'features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/patients/presentation/bloc/patient_bloc.dart';
+import 'features/patients/presentation/bloc/patient_event.dart';
 import 'features/settings/presentation/bloc/settings_bloc.dart';
 import 'features/settings/presentation/bloc/settings_state.dart';
 import 'features/vitals/presentation/bloc/vitals_bloc.dart';
@@ -23,7 +24,9 @@ class VitalApp extends StatelessWidget {
         BlocProvider<AuthBloc>(
           create: (context) => locator<AuthBloc>()..add(AuthCheckRequested()),
         ),
-        BlocProvider<PatientBloc>(create: (context) => locator<PatientBloc>()),
+        BlocProvider<PatientBloc>(
+          create: (context) => locator<PatientBloc>()..add(PatientListRequested()),
+        ),
         BlocProvider<VitalsBloc>(create: (context) => locator<VitalsBloc>()),
         BlocProvider<AiAssistantBloc>(
           create: (context) => locator<AiAssistantBloc>(),
@@ -34,21 +37,17 @@ class VitalApp extends StatelessWidget {
       ],
       child: BlocBuilder<SettingsBloc, SettingsState>(
         builder: (context, settings) {
-          ThemeData themeData;
-          if (settings.isHighContrast) {
-            themeData = settings.themeMode == ThemeMode.dark
-                ? AppTheme.highContrastDarkTheme
-                : AppTheme.highContrastLightTheme;
-          } else {
-            themeData = settings.themeMode == ThemeMode.dark
-                ? AppTheme.darkTheme
-                : AppTheme.lightTheme;
-          }
+          final lightTheme = settings.isHighContrast
+              ? AppTheme.highContrastLightTheme
+              : AppTheme.lightTheme;
+          final darkTheme = settings.isHighContrast
+              ? AppTheme.highContrastDarkTheme
+              : AppTheme.darkTheme;
 
           return MaterialApp.router(
             title: 'VitalAI Health',
-            theme: themeData,
-            darkTheme: AppTheme.darkTheme,
+            theme: lightTheme,
+            darkTheme: darkTheme,
             themeMode: settings.themeMode,
             routerConfig: AppRouter.router,
             debugShowCheckedModeBanner: false,

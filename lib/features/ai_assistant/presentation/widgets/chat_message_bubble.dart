@@ -52,37 +52,37 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final isUser = message.isUser;
     final isFailed = message.status == 'failed';
     final isPending = message.status == 'pending';
+    final isEmergency = !isUser && message.content.contains('EMERGENCY NOTICE:');
     final timeStr =
         '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
       child: Column(
-        crossAxisAlignment:
-            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment:
-                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!isUser) ...[
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: AppColors.aiGradient,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.tertiary.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+                        color: AppColors.tertiary.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
                   child: const Icon(
                     Icons.auto_awesome_rounded,
-                    size: 16,
+                    size: 15,
                     color: Colors.white,
                   ),
                 ),
@@ -90,36 +90,44 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
               ],
               Flexible(
                 child: Column(
-                  crossAxisAlignment: isUser
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
+                  crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.78,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         gradient: isUser ? AppColors.primaryGradient : null,
                         color: isUser
                             ? null
-                            : isFailed
-                                ? AppColors.errorContainer
-                                : (isDark ? AppColors.darkCard : Colors.white),
-                        border: isUser || isFailed
+                            : isEmergency
+                                ? (isDark ? const Color(0xFF3B1219) : const Color(0xFFFEF2F2))
+                                : isFailed
+                                    ? AppColors.errorContainer
+                                    : (isDark ? AppColors.darkCard : Colors.white),
+                        border: isUser
                             ? null
                             : Border.all(
-                                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                                color: isEmergency
+                                    ? AppColors.error.withValues(alpha: 0.6)
+                                    : isDark
+                                        ? AppColors.darkBorder
+                                        : AppColors.lightBorder,
+                                width: isEmergency ? 1.5 : 1.0,
                               ),
                         borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(20),
-                          topRight: const Radius.circular(20),
-                          bottomLeft: Radius.circular(isUser ? 20 : 4),
-                          bottomRight: Radius.circular(isUser ? 4 : 20),
+                          topLeft: const Radius.circular(18),
+                          topRight: const Radius.circular(18),
+                          bottomLeft: Radius.circular(isUser ? 18 : 4),
+                          bottomRight: Radius.circular(isUser ? 4 : 18),
                         ),
                         boxShadow: isUser
                             ? [
                                 BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+                                  color: AppColors.primary.withValues(alpha: 0.25),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
                                 ),
                               ]
                             : AppShadows.subtle(context),
@@ -127,18 +135,24 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // User Quote preview if present
+                          if (isUser && message.content.startsWith('Regarding: "'))
+                            _buildQuoteHeader(context, message.content),
+
                           if (!isUser && !isFailed)
                             GenUiRenderer(
                               content: message.content,
                               textStyle: context.textTheme.bodyMedium?.copyWith(
                                 color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
                                 height: 1.5,
-                                fontSize: 15,
+                                fontSize: 14.5,
                               ),
                             )
                           else
                             SelectableText(
-                              message.content,
+                              isUser && message.content.startsWith('Regarding: "')
+                                  ? _extractUserBody(message.content)
+                                  : message.content,
                               style: context.textTheme.bodyMedium?.copyWith(
                                 color: isUser
                                     ? Colors.white
@@ -146,7 +160,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                                         ? AppColors.error
                                         : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
                                 height: 1.5,
-                                fontSize: 15,
+                                fontSize: 14.5,
                               ),
                             ),
                           const SizedBox(height: 6),
@@ -157,7 +171,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                               Text(
                                 timeStr,
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10.5,
                                   fontWeight: FontWeight.w500,
                                   color: isUser
                                       ? Colors.white.withValues(alpha: 0.75)
@@ -167,13 +181,17 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                               if (isPending) ...[
                                 const SizedBox(width: 6),
                                 const SizedBox(
-                                  width: 12,
-                                  height: 12,
+                                  width: 10,
+                                  height: 10,
                                   child: CircularProgressIndicator(
-                                    strokeWidth: 1.8,
+                                    strokeWidth: 1.5,
                                     color: Colors.white,
                                   ),
                                 ),
+                              ],
+                              if (isUser && !isPending && !isFailed) ...[
+                                const SizedBox(width: 4),
+                                const Icon(Icons.done_all_rounded, size: 13, color: Colors.white70),
                               ],
                             ],
                           ),
@@ -185,6 +203,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                         feedbackIsPositive: _feedbackIsPositive,
                         isSpeaking: _isSpeaking,
                         onCopy: () => _copyToClipboard(context),
+                        onQuote: widget.onQuoteReply != null
+                            ? () => widget.onQuoteReply!(message.content)
+                            : null,
                         onToggleThumbsUp: () {
                           setState(() {
                             _feedbackIsPositive =
@@ -219,13 +240,44 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
+  Widget _buildQuoteHeader(BuildContext context, String content) {
+    final firstLine = content.split('\n').first;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: const Border(left: BorderSide(color: Colors.white70, width: 3)),
+      ),
+      child: Text(
+        firstLine,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 11,
+          fontStyle: FontStyle.italic,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  String _extractUserBody(String content) {
+    final lines = content.split('\n');
+    if (lines.length > 1) {
+      return lines.sublist(1).join('\n').trim();
+    }
+    return content;
+  }
+
   Widget _buildSystemBubble(BuildContext context) {
     final isDark = context.isDarkMode;
 
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(AppRadius.full),
@@ -238,6 +290,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           style: context.textTheme.labelSmall?.copyWith(
             color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
             fontWeight: FontWeight.w600,
+            fontSize: 11,
           ),
         ),
       ),

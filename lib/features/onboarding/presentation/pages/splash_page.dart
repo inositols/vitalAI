@@ -63,7 +63,7 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
 
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
-      context.go('/patients');
+      context.go('/');
     } else {
       context.go('/login');
     }

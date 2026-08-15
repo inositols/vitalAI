@@ -10,6 +10,7 @@ class AppButton extends StatefulWidget {
   final Color? backgroundColor;
   final Color? textColor;
   final LinearGradient? gradient;
+  final EdgeInsetsGeometry? padding;
 
   const AppButton({
     super.key,
@@ -21,6 +22,7 @@ class AppButton extends StatefulWidget {
     this.backgroundColor,
     this.textColor,
     this.gradient,
+    this.padding,
   });
 
   @override
@@ -91,12 +93,15 @@ class _AppButtonState extends State<AppButton> with SingleTickerProviderStateMix
     return content;
   }
 
+  EdgeInsetsGeometry get _effectivePadding =>
+      widget.padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 14);
+
   Widget _buildOutlined(BuildContext context, Color color) {
     return OutlinedButton(
       onPressed: widget.isLoading ? null : widget.onPressed,
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: context.colorScheme.primary.withValues(alpha: 0.6), width: 1.5),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: _effectivePadding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -128,7 +133,7 @@ class _AppButtonState extends State<AppButton> with SingleTickerProviderStateMix
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
             foregroundColor: color,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: _effectivePadding,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -145,7 +150,7 @@ class _AppButtonState extends State<AppButton> with SingleTickerProviderStateMix
       style: ElevatedButton.styleFrom(
         backgroundColor: bg,
         foregroundColor: color,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: _effectivePadding,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -172,15 +177,19 @@ class _AppButtonState extends State<AppButton> with SingleTickerProviderStateMix
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(widget.icon, size: 20, color: color),
-          const SizedBox(width: 10),
-          Text(
-            widget.label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              letterSpacing: 0.2,
+          Icon(widget.icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 14.5,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],
@@ -189,10 +198,12 @@ class _AppButtonState extends State<AppButton> with SingleTickerProviderStateMix
 
     return Text(
       widget.label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: TextStyle(
         color: color,
         fontWeight: FontWeight.w700,
-        fontSize: 15,
+        fontSize: 14.5,
         letterSpacing: 0.2,
       ),
     );

@@ -3,6 +3,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:vitalai/core/database/db_service.dart';
 import 'package:vitalai/core/services/ai_service.dart';
 import 'package:vitalai/features/ai_assistant/data/models/chat_conversation.dart';
+import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 import 'package:vitalai/features/ai_assistant/data/repositories/ai_assistant_repository_impl.dart';
 import 'package:vitalai/features/ai_assistant/domain/services/health_context_service.dart';
 import 'package:vitalai/features/patients/data/models/patient_model.dart';
@@ -176,6 +177,38 @@ void main() {
     test('askAssistant offline fallback provides context-aware blood pressure response', () async {
       final response = await aiService.askAssistant("How has my blood pressure changed recently?");
       expect(response.toLowerCase(), contains('blood pressure'));
+    });
+
+    test('askAssistant personalizes response with patient name and actual BP numbers', () async {
+      const mockContext = HealthContext(
+        patientId: 1,
+        patientName: 'Jane Smith',
+        gender: 'Female',
+        age: 45,
+        medicalNotes: '',
+        conditions: ['Hypertension'],
+        allergies: [],
+        medications: ['Amlodipine 5mg'],
+        bpSystolicTrend: MetricTrend(average: 135, highest: 142, lowest: 128, direction: 'Stable', totalReadings: 5),
+        bpDiastolicTrend: MetricTrend(average: 88, highest: 92, lowest: 84, direction: 'Stable', totalReadings: 5),
+        glucoseTrend: MetricTrend(average: 96, direction: 'Stable', totalReadings: 2),
+        pulseTrend: MetricTrend(average: 74, direction: 'Stable', totalReadings: 5),
+        spo2Trend: MetricTrend(average: 98, direction: 'Stable', totalReadings: 5),
+        tempTrend: MetricTrend(average: 36.8, direction: 'Stable', totalReadings: 2),
+        weightTrend: MetricTrend(average: 65.0, direction: 'Stable', totalReadings: 2),
+        bmiTrend: MetricTrend(average: 23.5, direction: 'Stable', totalReadings: 2),
+        recentSymptoms: [],
+        totalVitalsCount: 5,
+      );
+
+      final response = await aiService.askAssistant(
+        "Analyze my blood pressure trend",
+        healthContext: mockContext,
+      );
+
+      expect(response, contains('Jane Smith'));
+      expect(response, contains('135/88'));
+      expect(response, contains('Stage 1 Hypertension'));
     });
   });
 }
