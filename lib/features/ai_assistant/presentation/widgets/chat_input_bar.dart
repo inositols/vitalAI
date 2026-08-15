@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
 
 class ChatInputBar extends StatelessWidget {
@@ -22,82 +21,66 @@ class ChatInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.35)
-                : const Color(0xFF64748B).withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
         border: Border(
           top: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            color: isDark ? AppColors.darkBorder : const Color(0xFFE2E8F0),
+            width: 1,
           ),
         ),
       ),
       child: SafeArea(
+        top: false,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // Context Attachment Button
-            Container(
-              margin: const EdgeInsets.only(bottom: 2),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+            // 1. (+) Context Attachment Button
+            IconButton(
+              icon: Icon(
+                Icons.add_circle_outline_rounded,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                size: 26,
               ),
-              child: IconButton(
-                icon: const Icon(
-                  Icons.add_rounded,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-                tooltip: 'Attach Clinical Context',
-                onPressed: onAttachContext,
-              ),
+              tooltip: 'Attach Clinical Context',
+              onPressed: onAttachContext,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
 
-            // Text Input Field
+            // 2. Rounded Pill Text Field with Inside Mic
             Expanded(
               child: Container(
+                height: 48,
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(AppRadius.xxl),
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    width: 1,
                   ),
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    const SizedBox(width: 14),
                     Expanded(
                       child: TextField(
                         controller: controller,
-                        maxLines: 4,
-                        minLines: 1,
-                        style: context.textTheme.bodyMedium?.copyWith(
+                        style: TextStyle(
                           fontSize: 14.5,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Ask your AI clinical companion...',
+                          hintText: 'Ask about your health...',
                           hintStyle: TextStyle(
-                            color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                             fontSize: 14,
                           ),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
                         ),
                         onSubmitted: (val) {
                           if (val.trim().isNotEmpty && !isGenerating) {
@@ -106,65 +89,50 @@ class ChatInputBar extends StatelessWidget {
                         },
                       ),
                     ),
-                    if (hasInputText)
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                        tooltip: 'Clear text',
-                        onPressed: () => controller.clear(),
+                    // Mic inside textfield
+                    IconButton(
+                      icon: const Icon(
+                        Icons.mic_rounded,
+                        color: Color(0xFF0062E0),
+                        size: 22,
                       ),
+                      tooltip: 'Voice Input',
+                      onPressed: onVoiceInput,
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
 
-            // Mic or Send Button
-            if (!hasInputText)
-              Container(
-                margin: const EdgeInsets.only(bottom: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.tertiary.withValues(alpha: 0.12),
+            // 3. Electric Blue Circular Send Button
+            GestureDetector(
+              onTap: isGenerating ? null : onSend,
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0062E0),
                   shape: BoxShape.circle,
                 ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.mic_rounded,
-                    color: AppColors.tertiary,
-                    size: 22,
-                  ),
-                  tooltip: 'Voice Input',
-                  onPressed: onVoiceInput,
-                ),
-              )
-            else
-              Container(
-                margin: const EdgeInsets.only(bottom: 2),
-                decoration: BoxDecoration(
-                  gradient: AppColors.aiGradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.tertiary.withValues(alpha: 0.35),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  icon: isGenerating
+                child: Center(
+                  child: isGenerating
                       ? const SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
-                  onPressed: isGenerating ? null : onSend,
+                      : const Icon(
+                          Icons.near_me_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                 ),
               ),
+            ),
           ],
         ),
       ),

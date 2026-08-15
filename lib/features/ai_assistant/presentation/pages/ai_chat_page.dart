@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_top_bar.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
 import '../../../settings/presentation/bloc/settings_bloc.dart';
@@ -10,7 +12,6 @@ import '../../data/models/health_context.dart';
 import '../bloc/ai_assistant_bloc.dart';
 import '../bloc/ai_assistant_event.dart';
 import '../bloc/ai_assistant_state.dart';
-import '../widgets/ai_chat_hero_header.dart';
 import '../widgets/ai_consent_view.dart';
 import '../widgets/attachment_menu_bottom_sheet.dart';
 import '../widgets/chat_input_bar.dart';
@@ -18,7 +19,6 @@ import '../widgets/chat_message_bubble.dart';
 import '../widgets/chat_typing_indicator.dart';
 import '../widgets/conversation_drawer.dart';
 import '../widgets/smart_suggestions_bar.dart';
-import '../widgets/sync_status_badge.dart';
 import '../widgets/voice_dictation_modal.dart';
 
 class AiChatPage extends StatefulWidget {
@@ -64,16 +64,14 @@ class _AiChatPageState extends State<AiChatPage> {
 
   void _sendMessage() {
     final text = _controller.text.trim();
-    if (text.isNotEmpty) {
-      _controller.clear();
-      context.read<AiAssistantBloc>().add(AiAssistantSendMessage(text));
-    }
+    if (text.isEmpty) return;
+    _controller.clear();
+    context.read<AiAssistantBloc>().add(AiAssistantSendMessage(text));
   }
 
-  void _replyToMessage(String text) {
+  void _replyToMessage(String content) {
     setState(() {
-      final preview = text.length > 55 ? '${text.substring(0, 52)}...' : text;
-      _controller.text = 'Regarding: "$preview"\n';
+      _controller.text = '> $content\n\n';
       _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
     });
   }
@@ -84,11 +82,14 @@ class _AiChatPageState extends State<AiChatPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => VoiceDictationModal(
-        onTextRecognized: (text) {
-          setState(() {
-            _controller.text = text;
-            _controller.selection = TextSelection.collapsed(offset: text.length);
-          });
+        onTextRecognized: (spokenText) {
+          Navigator.pop(ctx);
+          if (spokenText.trim().isNotEmpty) {
+            setState(() {
+              _controller.text = spokenText;
+              _controller.selection = TextSelection.collapsed(offset: spokenText.length);
+            });
+          }
         },
       ),
     );
@@ -186,8 +187,7 @@ class _AiChatPageState extends State<AiChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settings) {
@@ -213,14 +213,24 @@ class _AiChatPageState extends State<AiChatPage> {
               builder: (context, aiState) {
                 if (aiState is AiAssistantLoading || aiState is AiAssistantInitial) {
                   return Scaffold(
-                    appBar: AppBar(title: const Text('Ask VitalAI')),
+                    backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
+                    appBar: AppTopBar(
+                      title: 'VitalAI',
+                      initials: activePatient?.name ?? 'A',
+                      onAvatarTap: () => context.go('/settings'),
+                    ),
                     body: const Center(child: CircularProgressIndicator()),
                   );
                 }
 
                 if (aiState is AiAssistantError) {
                   return Scaffold(
-                    appBar: AppBar(title: const Text('Ask VitalAI')),
+                    backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
+                    appBar: AppTopBar(
+                      title: 'VitalAI',
+                      initials: activePatient?.name ?? 'A',
+                      onAvatarTap: () => context.go('/settings'),
+                    ),
                     body: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -233,13 +243,13 @@ class _AiChatPageState extends State<AiChatPage> {
                                 color: AppColors.errorContainer.withValues(alpha: 0.3),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.error_outline_rounded, size: 48, color: theme.colorScheme.error),
+                              child: Icon(Icons.error_outline_rounded, size: 48, color: Theme.of(context).colorScheme.error),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               aiState.message,
                               textAlign: TextAlign.center,
-                              style: theme.textTheme.bodyMedium,
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 20),
                             ElevatedButton.icon(
@@ -262,52 +272,26 @@ class _AiChatPageState extends State<AiChatPage> {
                 final messages = loadedState.activeConversation.messages;
 
                 return Scaffold(
-                  appBar: AppBar(
-                    title: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFE8ECEF),
+                  appBar: AppTopBar(
+                    title: 'VitalAI',
+                    initials: activePatient?.name ?? 'A',
+                    onAvatarTap: () => context.go('/settings'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Ask VitalAI',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            SyncStatusBadge(status: loadedState.syncStatus),
-                          ],
+                        IconButton(
+                          icon: const Icon(Icons.history_rounded, color: Color(0xFF64748B)),
+                          tooltip: 'Chat Sessions',
+                          onPressed: () => _openConversationHistory(context, loadedState),
                         ),
-                        Text(
-                          activePatient != null ? 'Patient: ${activePatient.name}' : 'No Patient Selected',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                            fontSize: 11.5,
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.key_rounded, color: Color(0xFF64748B)),
+                          tooltip: 'Gemini API Key',
+                          onPressed: () => _openApiKeyDialog(context, settings.apiKey),
                         ),
                       ],
                     ),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.key_rounded),
-                        tooltip: 'Gemini API Key',
-                        onPressed: () => _openApiKeyDialog(context, settings.apiKey),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.history_rounded),
-                        tooltip: 'Chat Sessions',
-                        onPressed: () => _openConversationHistory(context, loadedState),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_comment_rounded),
-                        tooltip: 'New Conversation',
-                        onPressed: () => context.read<AiAssistantBloc>().add(const AiAssistantNewChat()),
-                      ),
-                    ],
                   ),
                   body: SafeArea(
                     child: Column(
@@ -315,27 +299,18 @@ class _AiChatPageState extends State<AiChatPage> {
                         Expanded(
                           child: ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: messages.length + (messages.length <= 1 ? 1 : 0) + (loadedState.isGenerating ? 1 : 0),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            itemCount: messages.length + (loadedState.isGenerating ? 1 : 0),
                             itemBuilder: (ctx, index) {
-                              if (messages.length <= 1 && index == 0) {
-                                return AiChatHeroHeader(
-                                  patientName: activePatient?.name ?? '',
-                                  onSelectPrompt: (prompt) => context.read<AiAssistantBloc>().add(AiAssistantSendMessage(prompt)),
-                                );
-                              }
-
-                              final msgIndex = messages.length <= 1 ? index - 1 : index;
-
-                              if (msgIndex < messages.length) {
-                                final message = messages[msgIndex];
+                              if (index < messages.length) {
+                                final message = messages[index];
                                 return ChatMessageBubble(
                                   message: message,
                                   onQuoteReply: _replyToMessage,
                                   onRetry: () => context.read<AiAssistantBloc>().add(AiAssistantRetryMessage(message.id)),
                                   onRegenerate: () {
-                                    if (msgIndex > 0) {
-                                      final userPrompt = messages[msgIndex - 1].content;
+                                    if (index > 0) {
+                                      final userPrompt = messages[index - 1].content;
                                       context.read<AiAssistantBloc>().add(AiAssistantSendMessage(userPrompt));
                                     }
                                   },
@@ -346,10 +321,12 @@ class _AiChatPageState extends State<AiChatPage> {
                             },
                           ),
                         ),
+                        // 1. Horizontal Scrollable Suggestion Chips
                         SmartSuggestionsBar(
                           suggestions: loadedState.smartSuggestions,
                           onSelectSuggestion: (query) => context.read<AiAssistantBloc>().add(AiAssistantSendMessage(query)),
                         ),
+                        // 2. Pill Input Bar with (+) and Mic
                         ChatInputBar(
                           controller: _controller,
                           hasInputText: _hasInputText,
