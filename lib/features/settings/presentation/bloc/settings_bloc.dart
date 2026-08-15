@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../core/services/ai_service.dart';
 import 'settings_event.dart';
 import 'settings_state.dart';
 
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
-  final FlutterSecureStorage _secureStorage;
+  final FlutterSecureStorage secureStorage;
 
-  SettingsBloc({required this._secureStorage})
-      : super(const SettingsState()) {
+  SettingsBloc({
+    required this.secureStorage,
+    SettingsState? initialState,
+  }) : super(initialState ?? const SettingsState()) {
     on<SettingsLoadRequested>(_onSettingsLoadRequested);
     on<ThemeChanged>(_onThemeChanged);
     on<TemperatureUnitChanged>(_onTemperatureUnitChanged);
@@ -21,14 +25,14 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
   Future<void> _onSettingsLoadRequested(
       SettingsLoadRequested event, Emitter<SettingsState> emit) async {
-    final themeStr = await _secureStorage.read(key: 'theme_mode');
-    final hcStr = await _secureStorage.read(key: 'is_high_contrast');
-    final tempUnit = await _secureStorage.read(key: 'temp_unit') ?? 'C';
-    final glucoseUnit = await _secureStorage.read(key: 'glucose_unit') ?? 'mg/dL';
-    final weightUnit = await _secureStorage.read(key: 'weight_unit') ?? 'kg';
-    final lang = await _secureStorage.read(key: 'language_code') ?? 'en';
-    final consentStr = await _secureStorage.read(key: 'ai_consent');
-    final apiKey = await _secureStorage.read(key: 'api_key') ?? '';
+    final themeStr = await secureStorage.read(key: 'theme_mode');
+    final hcStr = await secureStorage.read(key: 'is_high_contrast');
+    final tempUnit = await secureStorage.read(key: 'temp_unit') ?? 'C';
+    final glucoseUnit = await secureStorage.read(key: 'glucose_unit') ?? 'mg/dL';
+    final weightUnit = await secureStorage.read(key: 'weight_unit') ?? 'kg';
+    final lang = await secureStorage.read(key: 'language_code') ?? 'en';
+    final consentStr = await secureStorage.read(key: 'ai_consent');
+    final apiKey = await secureStorage.read(key: 'api_key') ?? '';
 
     ThemeMode themeMode = ThemeMode.system;
     if (themeStr == 'light') themeMode = ThemeMode.light;
@@ -36,6 +40,10 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
     final isHighContrast = hcStr == 'true';
     final aiConsent = consentStr == 'true';
+
+    if (apiKey.isNotEmpty && locator.isRegistered<AiService>()) {
+      locator<AiService>().updateApiKey(apiKey);
+    }
 
     emit(SettingsState(
       themeMode: themeMode,
@@ -55,8 +63,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     if (event.themeMode == ThemeMode.light) themeStr = 'light';
     if (event.themeMode == ThemeMode.dark) themeStr = 'dark';
 
-    await _secureStorage.write(key: 'theme_mode', value: themeStr);
-    await _secureStorage.write(
+    await secureStorage.write(key: 'theme_mode', value: themeStr);
+    await secureStorage.write(
         key: 'is_high_contrast', value: event.isHighContrast.toString());
 
     emit(state.copyWith(
@@ -67,38 +75,41 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
   Future<void> _onTemperatureUnitChanged(
       TemperatureUnitChanged event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(key: 'temp_unit', value: event.unit);
+    await secureStorage.write(key: 'temp_unit', value: event.unit);
     emit(state.copyWith(tempUnit: event.unit));
   }
 
   Future<void> _onGlucoseUnitChanged(
       GlucoseUnitChanged event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(key: 'glucose_unit', value: event.unit);
+    await secureStorage.write(key: 'glucose_unit', value: event.unit);
     emit(state.copyWith(glucoseUnit: event.unit));
   }
 
   Future<void> _onWeightUnitChanged(
       WeightUnitChanged event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(key: 'weight_unit', value: event.unit);
+    await secureStorage.write(key: 'weight_unit', value: event.unit);
     emit(state.copyWith(weightUnit: event.unit));
   }
 
   Future<void> _onLanguageChanged(
       LanguageChanged event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(key: 'language_code', value: event.languageCode);
+    await secureStorage.write(key: 'language_code', value: event.languageCode);
     emit(state.copyWith(languageCode: event.languageCode));
   }
 
   Future<void> _onAiConsentToggled(
       AiConsentToggled event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(
+    await secureStorage.write(
         key: 'ai_consent', value: event.consentGranted.toString());
     emit(state.copyWith(aiConsent: event.consentGranted));
   }
 
   Future<void> _onApiKeyUpdated(
       ApiKeyUpdated event, Emitter<SettingsState> emit) async {
-    await _secureStorage.write(key: 'api_key', value: event.apiKey);
+    await secureStorage.write(key: 'api_key', value: event.apiKey);
+    if (locator.isRegistered<AiService>()) {
+      locator<AiService>().updateApiKey(event.apiKey);
+    }
     emit(state.copyWith(apiKey: event.apiKey));
   }
 }

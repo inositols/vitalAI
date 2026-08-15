@@ -46,9 +46,11 @@ class _AddReminderSheetState extends State<AddReminderSheet> {
     final period = _selectedTime.period == DayPeriod.am ? 'AM' : 'PM';
     final formattedTime = '${hourStr.toString().padLeft(2, '0')}:$minuteStr $period';
 
+    final pId = widget.patientId > 0 ? widget.patientId : 1;
+
     final reminder = ReminderModel(
       id: const Uuid().v4(),
-      patientId: widget.patientId,
+      patientId: pId,
       title: title,
       time: formattedTime,
       hour: _selectedTime.hour,
@@ -60,6 +62,7 @@ class _AddReminderSheetState extends State<AddReminderSheet> {
     );
 
     context.read<RemindersBloc>().add(ReminderAdded(reminder));
+    context.showSnackBar('✓ Reminder scheduled for $formattedTime');
     Navigator.of(context).pop();
   }
 

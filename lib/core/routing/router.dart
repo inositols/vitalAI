@@ -12,7 +12,6 @@ import 'package:vitalai/features/auth/presentation/pages/login_page.dart';
 import 'package:vitalai/features/onboarding/presentation/pages/splash_page.dart';
 import 'package:vitalai/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:vitalai/core/theme/design_tokens.dart';
-
 import 'package:vitalai/features/reminders/presentation/pages/reminders_page.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -38,16 +37,8 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const LoginPage(),
     ),
     GoRoute(
-      path: '/patients',
-      builder: (context, state) => const PatientsPage(),
-    ),
-    GoRoute(
       path: '/add-vital',
       builder: (context, state) => const AddVitalPage(),
-    ),
-    GoRoute(
-      path: '/reminders',
-      builder: (context, state) => const RemindersPage(),
     ),
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
@@ -62,15 +53,15 @@ final GoRouter appRouter = GoRouter(
           ),
         ),
         GoRoute(
-          path: '/charts',
+          path: '/patients',
           pageBuilder: (context, state) => const NoTransitionPage(
-            child: ChartsPage(),
+            child: PatientsPage(),
           ),
         ),
         GoRoute(
-          path: '/history',
+          path: '/charts',
           pageBuilder: (context, state) => const NoTransitionPage(
-            child: HistoryPage(),
+            child: ChartsPage(),
           ),
         ),
         GoRoute(
@@ -80,15 +71,27 @@ final GoRouter appRouter = GoRouter(
           ),
         ),
         GoRoute(
-          path: '/caregiver',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: CaregiverPage(),
-          ),
-        ),
-        GoRoute(
           path: '/settings',
           pageBuilder: (context, state) => const NoTransitionPage(
             child: SettingsPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/reminders',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: RemindersPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/history',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: HistoryPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/caregiver',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: CaregiverPage(),
           ),
         ),
       ],
@@ -111,23 +114,28 @@ class MainShellScaffold extends StatelessWidget {
 
     final destinations = const [
       NavigationDestination(
-        icon: Icon(AppIcons.dashboard),
-        selectedIcon: Icon(AppIcons.dashboard, color: AppColors.primary),
-        label: 'Dashboard',
+        icon: Icon(Icons.grid_view_rounded),
+        selectedIcon: Icon(Icons.grid_view_rounded, color: AppColors.primary),
+        label: 'Home',
       ),
       NavigationDestination(
-        icon: Icon(AppIcons.aiAssistant),
-        selectedIcon: Icon(AppIcons.aiAssistant, color: AppColors.tertiary),
-        label: 'Ask VitalAI',
+        icon: Icon(Icons.people_outline_rounded),
+        selectedIcon: Icon(Icons.people_rounded, color: AppColors.primary),
+        label: 'Patients',
       ),
       NavigationDestination(
-        icon: Icon(AppIcons.chart),
-        selectedIcon: Icon(AppIcons.chart, color: AppColors.primary),
-        label: 'Analytics',
+        icon: Icon(Icons.show_chart_rounded),
+        selectedIcon: Icon(Icons.show_chart_rounded, color: AppColors.primary),
+        label: 'Vitals',
       ),
       NavigationDestination(
-        icon: Icon(AppIcons.settings),
-        selectedIcon: Icon(AppIcons.settings, color: AppColors.primary),
+        icon: Icon(Icons.auto_awesome_rounded),
+        selectedIcon: Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+        label: 'AI Chat',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
         label: 'Settings',
       ),
     ];
@@ -136,14 +144,17 @@ class MainShellScaffold extends StatelessWidget {
       switch (currentLoc) {
         case '/':
           return 0;
-        case '/ai-chat':
+        case '/patients':
+        case '/caregiver':
           return 1;
         case '/charts':
         case '/history':
+        case '/reminders':
           return 2;
-        case '/settings':
-        case '/caregiver':
+        case '/ai-chat':
           return 3;
+        case '/settings':
+          return 4;
         default:
           return 0;
       }
@@ -155,12 +166,15 @@ class MainShellScaffold extends StatelessWidget {
           context.go('/');
           break;
         case 1:
-          context.go('/ai-chat');
+          context.go('/patients');
           break;
         case 2:
           context.go('/charts');
           break;
         case 3:
+          context.go('/ai-chat');
+          break;
+        case 4:
           context.go('/settings');
           break;
       }
@@ -183,7 +197,7 @@ class MainShellScaffold extends StatelessWidget {
             color: isDark ? AppColors.darkSurface : Colors.white,
             border: Border(
               top: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                color: isDark ? AppColors.darkBorder : const Color(0xFFF1F5F9),
                 width: 1,
               ),
             ),
@@ -191,19 +205,17 @@ class MainShellScaffold extends StatelessWidget {
               BoxShadow(
                 color: isDark
                     ? Colors.black.withValues(alpha: 0.3)
-                    : const Color(0xFF64748B).withValues(alpha: 0.06),
+                    : const Color(0xFF0F172A).withValues(alpha: 0.04),
                 blurRadius: 16,
                 offset: const Offset(0, -4),
               ),
             ],
           ),
           child: NavigationBar(
-            height: 68,
+            height: 64,
             elevation: 0,
             backgroundColor: Colors.transparent,
-            indicatorColor: getSelectedIndex() == 1
-                ? AppColors.tertiary.withValues(alpha: 0.15)
-                : AppColors.primary.withValues(alpha: 0.15),
+            indicatorColor: AppColors.primary.withValues(alpha: 0.12),
             selectedIndex: getSelectedIndex(),
             onDestinationSelected: onItemTapped,
             destinations: destinations,

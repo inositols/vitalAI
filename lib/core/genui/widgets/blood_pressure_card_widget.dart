@@ -106,7 +106,9 @@ class BloodPressureCardWidget extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 8),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
                     InkWell(
                       onTap: () => GenUiActionHandler.logVital(context, metricType: 'Blood Pressure'),
@@ -126,7 +128,6 @@ class BloodPressureCardWidget extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     InkWell(
                       onTap: () => GenUiActionHandler.setReminder(context, title: 'Blood Pressure Check'),
                       child: Container(

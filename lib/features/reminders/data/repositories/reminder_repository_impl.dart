@@ -57,6 +57,7 @@ class ReminderRepositoryImpl implements ReminderRepository {
       _syncNotifications(defaults);
       return defaults;
     }
+    _syncNotifications(existing);
     return existing;
   }
 

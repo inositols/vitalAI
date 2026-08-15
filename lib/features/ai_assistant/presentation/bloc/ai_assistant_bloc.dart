@@ -103,9 +103,22 @@ class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
     var updatedConversations = currentState.conversations.map((c) => c.id == updatedConv.id ? updatedConv : c).toList();
     await repository.saveConversation(updatedConv);
 
-    emit(currentState.copyWith(activeConversation: updatedConv, conversations: updatedConversations, isGenerating: true));
+    final freshContext = await contextService.buildHealthContext(_currentPatientId!);
+    final suggestions = contextService.generateSmartSuggestions(freshContext);
 
-    final responseText = await aiService.askAssistant(event.content, healthContext: currentState.healthContext, history: updatedMessages);
+    emit(currentState.copyWith(
+      activeConversation: updatedConv,
+      conversations: updatedConversations,
+      healthContext: freshContext,
+      smartSuggestions: suggestions,
+      isGenerating: true,
+    ));
+
+    final responseText = await aiService.askAssistant(
+      event.content,
+      healthContext: freshContext,
+      history: updatedMessages,
+    );
     final aiMessage = ChatMessage(
       id: _uuid.v4(),
       conversationId: updatedConv.id,
@@ -120,7 +133,13 @@ class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
     updatedConversations = currentState.conversations.map((c) => c.id == updatedConv.id ? updatedConv : c).toList();
     await repository.saveConversation(updatedConv);
 
-    emit(currentState.copyWith(activeConversation: updatedConv, conversations: updatedConversations, isGenerating: false));
+    emit(currentState.copyWith(
+      activeConversation: updatedConv,
+      conversations: updatedConversations,
+      healthContext: freshContext,
+      smartSuggestions: suggestions,
+      isGenerating: false,
+    ));
   }
 
   Future<void> _onRetryMessage(AiAssistantRetryMessage event, Emitter<AiAssistantState> emit) async {

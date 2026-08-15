@@ -69,9 +69,9 @@ Keep tracking daily!
       await tester.pumpAndSettle();
 
       // Verify text
-      expect(find.textContaining('Here is your complete health evaluation.'), findsOneWidget);
-      expect(find.textContaining('Keep tracking daily!'), findsOneWidget);
-      expect(find.textContaining('```json'), findsNothing);
+      expect(find.textContaining('Here is your complete health evaluation.', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Keep tracking daily!', findRichText: true), findsOneWidget);
+      expect(find.textContaining('```json', findRichText: true), findsNothing);
 
       // Verify components rendered
       expect(find.byType(BloodPressureCardWidget), findsOneWidget);

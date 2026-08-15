@@ -21,20 +21,21 @@ class SettingsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          padding: const EdgeInsets.only(left: 6, bottom: 8),
           child: Text(
-            title,
-            style: context.textTheme.labelLarge?.copyWith(
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              letterSpacing: 0.5,
+            title.toUpperCase(),
+            style: TextStyle(
+              color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              letterSpacing: 0.8,
             ),
           ),
         ),
         AppCard(
-          margin: const EdgeInsets.only(bottom: 24),
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          borderRadius: AppRadius.xl,
           child: Column(
             children: List.generate(children.length, (index) {
               final child = children[index];
@@ -46,7 +47,8 @@ class SettingsSection extends StatelessWidget {
                   Divider(
                     height: 1,
                     color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                    indent: 56,
+                    indent: 54,
+                    endIndent: 16,
                   ),
                 ],
               );
@@ -62,7 +64,7 @@ class SettingTileItem extends StatelessWidget {
   final IconData icon;
   final Color iconBg;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -71,7 +73,7 @@ class SettingTileItem extends StatelessWidget {
     required this.icon,
     required this.iconBg,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     this.trailing,
     this.onTap,
   });
@@ -84,40 +86,37 @@ class SettingTileItem extends StatelessWidget {
       color: Colors.transparent,
       child: ListTile(
         onTap: onTap,
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: iconBg,
+            color: iconBg.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(AppRadius.md),
-            boxShadow: [
-              BoxShadow(
-                color: iconBg.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
           ),
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon, color: iconBg, size: 18),
         ),
         title: Text(
           title,
-          style: context.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
           ),
         ),
-        subtitle: Text(
-          subtitle,
-          style: context.textTheme.bodySmall?.copyWith(
-            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-            fontSize: 12,
-          ),
-        ),
+        subtitle: subtitle != null
+            ? Text(
+                subtitle!,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  fontSize: 11.5,
+                ),
+              )
+            : null,
         trailing: trailing ??
             (onTap != null
                 ? Icon(
                     Icons.chevron_right_rounded,
-                    size: 22,
+                    size: 20,
                     color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
                   )
                 : null),

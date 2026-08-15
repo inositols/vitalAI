@@ -8,7 +8,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository authRepository;
   StreamSubscription<AuthUser?>? _authStateSubscription;
 
-  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
+  AuthBloc({required this.authRepository})
+      : super(
+          authRepository.currentUser != null
+              ? AuthAuthenticated(authRepository.currentUser!)
+              : AuthInitial(),
+        ) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthEmailSignInPressed>(_onAuthEmailSignInPressed);
     on<AuthEmailSignUpPressed>(_onAuthEmailSignUpPressed);

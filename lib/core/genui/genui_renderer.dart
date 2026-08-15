@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'genui_parser.dart';
 import 'builders/genui_widget_builder.dart';
+import 'widgets/genui_formatted_text.dart';
 import '../theme/design_tokens.dart';
 
 /// Dynamic Generative UI Renderer widget that parses AI structured responses and composes pre-built Flutter widgets.
@@ -21,20 +22,21 @@ class GenUiRenderer extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (cleanText.isNotEmpty)
-          Text(
-            cleanText,
-            style: textStyle ?? Theme.of(context).textTheme.bodyMedium,
+          GenUiFormattedText(
+            text: cleanText,
+            baseStyle: textStyle,
           ),
         if (components.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           ...List.generate(components.length, (index) {
             final model = components[index];
             return TweenAnimationBuilder<double>(
               key: ValueKey('${model.type}_$index'),
               tween: Tween<double>(begin: 0.0, end: 1.0),
-              duration: Duration(milliseconds: 300 + (index * 100)),
+              duration: Duration(milliseconds: 320 + (index * 100)),
               curve: AppMotion.easeOutCubic,
               builder: (ctx, opacity, child) {
                 return Opacity(
@@ -45,7 +47,10 @@ class GenUiRenderer extends StatelessWidget {
                   ),
                 );
               },
-              child: GenUiWidgetBuilder.build(context, model),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: GenUiWidgetBuilder.build(context, model),
+              ),
             );
           }),
         ],
@@ -53,3 +58,4 @@ class GenUiRenderer extends StatelessWidget {
     );
   }
 }
+
