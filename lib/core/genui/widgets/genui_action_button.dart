@@ -36,69 +36,13 @@ class GenUiActionButtonWidget extends StatelessWidget {
       return;
     }
 
-    // Default route navigation
-    final targetRoute = _resolveRoute(model.route, model.action);
+    // Default route navigation using verified route mapping
+    final targetRoute = model.verifiedRoute;
     if (targetRoute == '/add-vital' || targetRoute == '/patients') {
       context.push(targetRoute);
     } else {
       context.go(targetRoute);
     }
-  }
-
-  String _resolveRoute(String? rawRoute, String rawAction) {
-    if (rawRoute == null || rawRoute.trim().isEmpty) {
-      final act = rawAction.toLowerCase();
-      if (act.contains('add') || act.contains('log') || act.contains('record')) {
-        return '/add-vital';
-      }
-      if (act.contains('chart') || act.contains('analytic') || act.contains('trend')) {
-        return '/charts';
-      }
-      if (act.contains('history') || act.contains('export') || act.contains('doctor')) {
-        return '/history';
-      }
-      return '/add-vital';
-    }
-
-    final cleaned = rawRoute.toLowerCase().trim();
-
-    if (cleaned == '/add-vital' || 
-        cleaned.contains('add') || 
-        cleaned.contains('log') || 
-        cleaned.contains('record')) {
-      return '/add-vital';
-    }
-    if (cleaned == '/charts' || 
-        cleaned.contains('chart') || 
-        cleaned.contains('analytic') || 
-        cleaned.contains('trend')) {
-      return '/charts';
-    }
-    if (cleaned == '/history' || 
-        cleaned.contains('history') || 
-        cleaned.contains('export') || 
-        cleaned.contains('report')) {
-      return '/history';
-    }
-    if (cleaned == '/patients' || 
-        cleaned.contains('patient') || 
-        cleaned.contains('profile')) {
-      return '/patients';
-    }
-    if (cleaned == '/reminders' || cleaned.contains('reminder')) {
-      return '/reminders';
-    }
-    if (cleaned == '/settings' || cleaned.contains('setting')) {
-      return '/settings';
-    }
-    if (cleaned == '/caregiver' || cleaned.contains('caregiver')) {
-      return '/caregiver';
-    }
-    if (cleaned == '/' || cleaned.contains('dashboard') || cleaned.contains('home')) {
-      return '/';
-    }
-
-    return '/add-vital';
   }
 
   IconData _getIcon() {

@@ -142,4 +142,40 @@ class GenUiParser {
         return null;
     }
   }
+
+  /// Parses a full structured response containing answer text, components, and actions.
+  static GenUiStructuredResponse parseStructuredResponse(
+    String rawText, {
+    String defaultIntent = 'general_response',
+  }) {
+    try {
+      final components = parseComponents(rawText);
+      final clean = cleanText(rawText);
+
+      final actionList = <GenUiActionButtonModel>[];
+      final contentComponents = <GenUiComponentModel>[];
+
+      for (final comp in components) {
+        if (comp is GenUiActionButtonModel) {
+          actionList.add(comp);
+        } else {
+          contentComponents.add(comp);
+        }
+      }
+
+      return GenUiStructuredResponse(
+        intent: defaultIntent,
+        answer: clean.isNotEmpty ? clean : rawText,
+        components: contentComponents,
+        actions: actionList,
+      );
+    } catch (_) {
+      return GenUiStructuredResponse(
+        intent: defaultIntent,
+        answer: rawText,
+        components: const [],
+        actions: const [],
+      );
+    }
+  }
 }

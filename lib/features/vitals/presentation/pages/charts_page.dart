@@ -39,7 +39,9 @@ class _ChartsPageState extends State<ChartsPage> {
     return BlocBuilder<PatientBloc, PatientState>(
       builder: (context, patientState) {
         final activePatient = patientState is PatientLoadSuccess ? patientState.activePatient : null;
-        final patientName = activePatient?.name ?? 'Alex';
+        final patientName = (activePatient != null && activePatient.name.trim().isNotEmpty)
+            ? activePatient.name.trim()
+            : 'User';
 
         return Scaffold(
           backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),

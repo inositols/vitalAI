@@ -233,10 +233,28 @@ class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
       id: _uuid.v4(),
       conversationId: convId,
       sender: 'ai',
-      content: 'Hi $patientName! I am your personal VitalAI health companion. I analyze your blood pressure, glucose, pulse, SpO₂, temperature, and medications to answer questions, spot trends, and help you prepare for doctor visits. How can I support your health today?',
+      content: 'Hello $patientName! 👋 I am your personal **VitalAI** clinical health companion.\n\n'
+          'You can ask me **any question** about your health, symptoms, nutrition, medications, or ask me to interpret your recorded vital trends.\n\n'
+          '```json\n'
+          '{\n'
+          '  \"type\": \"education_card\",\n'
+          '  \"title\": \"What would you like to explore?\",\n'
+          '  \"definition\": \"I can provide medical insights, log vital readings, set medication reminders, or prepare a summary for your doctor.\",\n'
+          '  \"normalRange\": \"Ready to Assist\",\n'
+          '  \"relatedReading\": [\"Check Blood Pressure\", \"Heart-Healthy Meal Ideas\", \"Dizziness Causes\", \"Today\'s Health Summary\"]\n'
+          '}\n'
+          '```\n\n'
+          '*Disclaimer: VitalAI provides educational health guidance and tracking assistance. Consult your physician for medical diagnosis.*',
       timestamp: DateTime.now(),
       status: 'synced',
     );
-    return ChatConversation(id: convId, patientId: patientId, title: 'New Conversation', createdAt: DateTime.now(), updatedAt: DateTime.now(), messages: [welcomeMsg]);
+    return ChatConversation(
+      id: convId,
+      patientId: patientId,
+      title: 'New Conversation',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      messages: [welcomeMsg],
+    );
   }
 }

@@ -25,31 +25,37 @@ class GenUiRenderer extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (cleanText.isNotEmpty)
-          GenUiFormattedText(
-            text: cleanText,
-            baseStyle: textStyle,
+          SizedBox(
+            width: double.infinity,
+            child: GenUiFormattedText(
+              text: cleanText,
+              baseStyle: textStyle,
+            ),
           ),
         if (components.isNotEmpty) ...[
           const SizedBox(height: 10),
           ...List.generate(components.length, (index) {
             final model = components[index];
-            return TweenAnimationBuilder<double>(
-              key: ValueKey('${model.type}_$index'),
-              tween: Tween<double>(begin: 0.0, end: 1.0),
-              duration: Duration(milliseconds: 320 + (index * 100)),
-              curve: AppMotion.easeOutCubic,
-              builder: (ctx, opacity, child) {
-                return Opacity(
-                  opacity: opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, (1 - opacity) * 12),
-                    child: child,
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: GenUiWidgetBuilder.build(context, model),
+            return SizedBox(
+              width: double.infinity,
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey('${model.type}_$index'),
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: Duration(milliseconds: 320 + (index * 100)),
+                curve: AppMotion.easeOutCubic,
+                builder: (ctx, opacity, child) {
+                  return Opacity(
+                    opacity: opacity,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - opacity) * 12),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: GenUiWidgetBuilder.build(context, model),
+                ),
               ),
             );
           }),

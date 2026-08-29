@@ -61,9 +61,11 @@ class _RemindersPageState extends State<RemindersPage> {
     final patientId = patientState is PatientLoadSuccess && patientState.activePatient != null
         ? patientState.activePatient!.id
         : 1;
-    final patientName = patientState is PatientLoadSuccess && patientState.activePatient != null
-        ? patientState.activePatient!.name
-        : 'Alex';
+    final patientName = (patientState is PatientLoadSuccess &&
+            patientState.activePatient != null &&
+            patientState.activePatient!.name.trim().isNotEmpty)
+        ? patientState.activePatient!.name.trim()
+        : 'User';
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),

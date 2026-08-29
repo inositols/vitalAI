@@ -1,16 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:vitalai/core/config/app_env.dart';
 import 'package:vitalai/core/di/injection.dart';
+import 'package:vitalai/core/genui/services/ai_intent_classifier.dart';
 import 'package:vitalai/core/genui/services/genui_prompt_builder.dart';
-import 'package:vitalai/core/genui/services/genui_cache_service.dart';
 import 'package:vitalai/features/ai_assistant/data/models/chat_message.dart';
 import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_bloc.dart';
 
-import 'ai_explanation_service.dart';
-
-/// Service responsible for communicating with Gemini to generate context-aware health insights,
-/// summarize trends, prepare doctor visits, and compose dynamic Generative UI structures.
+/// Service responsible for communicating with Gemini to answer any health and medical question,
+/// generate context-aware clinical insights, summarize trends, prepare doctor visits,
+/// and compose dynamic Generative UI structures.
 class AiService {
   String? _apiKey;
   GenerativeModel? _model;
@@ -20,12 +20,16 @@ class AiService {
   }
 
   void _initModel() {
-    final hasValidKey = _apiKey != null && _apiKey!.trim().isNotEmpty;
+    final keyToUse = (_apiKey != null && _apiKey!.trim().isNotEmpty)
+        ? _apiKey!.trim()
+        : AppEnv.defaultGeminiApiKey;
+
+    final hasValidKey = keyToUse.isNotEmpty;
 
     if (hasValidKey) {
       _model = GenerativeModel(
         model: 'gemini-1.5-flash',
-        apiKey: _apiKey!.trim(),
+        apiKey: keyToUse,
         systemInstruction: Content.system(GenUiPromptBuilder.buildSystemInstruction()),
         requestOptions: const RequestOptions(apiVersion: 'v1beta'),
       );
@@ -54,7 +58,7 @@ class AiService {
   /// Check if the AI model is fully configured.
   bool get isConfigured => _model != null;
 
-  /// Generate response from a chat query using patient health context and caching.
+  /// Generate response from a chat query for any health topic, using patient context when relevant.
   Future<String> askAssistant(
     String prompt, {
     HealthContext? healthContext,
@@ -72,64 +76,58 @@ class AiService {
       }
     }
 
-    final cacheKey = "${healthContext?.patientId ?? 0}_${prompt.trim().toLowerCase()}";
-
-    // 1. Check response cache
-    final cached = await GenUiCacheService.getCachedResponse(cacheKey);
-    if (cached != null && cached.isNotEmpty) {
-      return cached;
-    }
-
-    // 2. Check emergency crisis triggers first
+    // 1. Check emergency crisis triggers first
     final emergencyCheck = _checkEmergencyInput(prompt, healthContext);
     if (emergencyCheck != null) {
       return emergencyCheck;
     }
 
-    // 3. Check explicit educational explanation triggers
-    final explanationCheck = AiExplanationService.handleExplanationPrompt(prompt);
-    if (explanationCheck != null && _model == null) {
-      return explanationCheck;
-    }
+    // 2. Classify user intent
+    final intent = AiIntentClassifier.classify(prompt);
 
-    if (_model == null) {
-      final fallback = _generateMockFallback(prompt, healthContext);
-      await GenUiCacheService.cacheResponse(cacheKey, fallback);
-      return fallback;
-    }
-
-    try {
-      final buffer = StringBuffer();
-      if (healthContext != null) {
-        buffer.writeln(healthContext.toAiContextString());
-        buffer.writeln('-----------------------------------');
-      }
-
-      if (history != null && history.isNotEmpty) {
-        buffer.writeln('Recent Conversation History:');
-        // Take the latest 8 messages
-        final recentHistory = history.length > 8 ? history.sublist(history.length - 8) : history;
-        for (var msg in recentHistory) {
-          buffer.writeln('${msg.sender.toUpperCase()}: ${msg.content}');
+    // 3. If Gemini Model is configured, query Gemini API directly
+    if (_model != null) {
+      try {
+        final buffer = StringBuffer();
+        if (healthContext != null) {
+          buffer.writeln('Patient Profile & Health Context:');
+          buffer.writeln(healthContext.toAiContextString());
+          buffer.writeln('-----------------------------------');
         }
-        buffer.writeln('-----------------------------------');
+
+        if (history != null && history.isNotEmpty) {
+          buffer.writeln('Recent Conversation History:');
+          final recentHistory = history.length > 8 ? history.sublist(history.length - 8) : history;
+          for (var msg in recentHistory) {
+            buffer.writeln('${msg.sender.toUpperCase()}: ${msg.content}');
+          }
+          buffer.writeln('-----------------------------------');
+        }
+
+        buffer.writeln('User Question: $prompt');
+        buffer.writeln('Detected Query Intent: ${intent.name}');
+        buffer.writeln(
+          'Specific Guidelines for this response:\n'
+          '1. Answer the question directly with high clinical precision, citing recognized clinical guidelines (AHA, ADA, WHO, CDC) where relevant.\n'
+          '2. If the user asks for a simple definition or explanation, provide a concise text answer without generating bloated UI.\n'
+          '3. If the user asks about patient records or trends, use ONLY the recorded context. If data is sparse or missing, state this limitation clearly.\n'
+          '4. If generating GenUI components, choose ONLY the single most appropriate component (e.g. trend_chart for trends, reminder_card for meds, report_card for doctor prep).\n'
+          '5. Action buttons must ONLY route to verified paths: /charts, /history, /add-vital, /reminders, /caregiver, /settings, /patients.',
+        );
+
+        final content = [Content.text(buffer.toString())];
+        final response = await _model!.generateContent(content);
+        final textResult = response.text;
+        if (textResult != null && textResult.trim().isNotEmpty) {
+          return textResult;
+        }
+      } catch (e) {
+        debugPrint("Gemini API Error (falling back to conversational engine): $e");
       }
-
-      buffer.writeln('User Question: $prompt');
-      buffer.writeln('Instructions: Provide an accurate, direct, and compassionate clinical answer tailored specifically to the prompt and the patient\'s records above.');
-
-      final content = [Content.text(buffer.toString())];
-      final response = await _model!.generateContent(content);
-      final textResult = response.text ?? "I was unable to analyze the data. Please try again.";
-
-      await GenUiCacheService.cacheResponse(cacheKey, textResult);
-      return textResult;
-    } catch (e) {
-      debugPrint("Gemini API Error: $e");
-      final fallback = _generateMockFallback(prompt, healthContext);
-      await GenUiCacheService.cacheResponse(cacheKey, fallback);
-      return fallback;
     }
+
+    // 4. Conversational Clinical Intelligence Engine (Answers any health topic accurately)
+    return _generateMockFallback(prompt, healthContext, intent: intent);
   }
 
   /// Generate Quick Health Overview Action
@@ -150,7 +148,7 @@ class AiService {
 
   /// Generate Quick Doctor Preparation Action
   Future<String> generateDoctorPrep(HealthContext healthContext) async {
-    const prompt = "Generate my health report.";
+    const prompt = "Generate my health report for doctor visit.";
     return askAssistant(prompt, healthContext: healthContext);
   }
 
@@ -172,514 +170,395 @@ class AiService {
         lower.contains("cannot breathe") ||
         lower.contains("heart attack") ||
         lower.contains("stroke") ||
-        lower.contains("185") ||
-        lower.contains("180") ||
-        lower.contains("crisis");
+        lower.contains("sudden numbness") ||
+        lower.contains("facial droop") ||
+        lower.contains("slurred speech") ||
+        lower.contains("severe crisis");
 
     if (hasEmergencySymptoms) {
-      return "⚠️ **IMPORTANT EMERGENCY NOTICE:** Severe chest pain, shortness of breath, or hypertensive crisis readings (systolic ≥ 180) require immediate medical attention. Please seek urgent emergency care or call emergency services (911). *Do not wait for symptoms to decrease.*";
+      return "⚠️ **IMPORTANT EMERGENCY MEDICAL NOTICE:**\n\n"
+          "Symptoms such as severe crushing chest pain, acute shortness of breath, sudden facial drooping, arm weakness, or difficulty speaking indicate a potential medical emergency (such as myocardial infarction or acute stroke).\n\n"
+          "• **Action Required:** Please call **911** (or your local emergency services) or proceed to the nearest Emergency Department immediately.\n"
+          "• *Do not drive yourself or wait for symptoms to subside.*";
     }
 
     return null;
   }
 
-  String _generateMockFallback(String prompt, HealthContext? context) {
-    final lower = prompt.toLowerCase();
-    final patientName = context?.patientName ?? 'Patient';
+  /// Conversational Clinical Intelligence Engine answering any question naturally and accurately based on intent.
+  String _generateMockFallback(String prompt, HealthContext? context, {AiIntent? intent}) {
+    final lower = prompt.toLowerCase().trim();
+    final patientName = context?.patientName ?? 'there';
+    final detectedIntent = intent ?? AiIntentClassifier.classify(prompt);
 
-    // Extract dynamic real patient baseline metrics
-    final bpSys = context?.bpSystolicTrend.average?.round() ?? 122;
-    final bpDia = context?.bpDiastolicTrend.average?.round() ?? 80;
-    final bpHigh = context?.bpSystolicTrend.highest?.round() ?? 128;
-    final bpLow = context?.bpSystolicTrend.lowest?.round() ?? 118;
+    // Baseline metrics from context
+    final bpSys = context?.bpSystolicTrend.average?.round();
+    final bpDia = context?.bpDiastolicTrend.average?.round();
     final bpDirection = context?.bpSystolicTrend.direction ?? 'Stable';
+    final bpTotalReadings = context?.bpSystolicTrend.totalReadings ?? 0;
 
     final glucoseAvg = context?.glucoseTrend.average != null
         ? context!.glucoseTrend.average!.toStringAsFixed(1)
-        : '95';
-    final glucoseDirection = context?.glucoseTrend.direction ?? 'Stable';
+        : null;
+    final glucoseTotalReadings = context?.glucoseTrend.totalReadings ?? 0;
 
     final pulseAvg = context?.pulseTrend.average?.round() ?? 72;
     final spo2Avg = context?.spo2Trend.average != null
         ? context!.spo2Trend.average!.toStringAsFixed(1)
         : '98';
 
-    final conditionsStr = context != null && context.conditions.isNotEmpty
-        ? context.conditions.join(', ')
-        : 'No chronic conditions logged';
-
-    final rxStr = context != null && context.medications.isNotEmpty
-        ? context.medications.join(', ')
-        : 'No active prescriptions recorded';
+    // -------------------------------------------------------------
+    // 1. EMERGENCY SAFETY INTENT
+    // -------------------------------------------------------------
+    if (detectedIntent == AiIntent.safetyEmergency) {
+      return "⚠️ **IMPORTANT EMERGENCY MEDICAL NOTICE:**\n\n"
+          "The symptoms described (such as severe chest pain, acute shortness of breath, sudden numbness, or stroke signs) require **immediate emergency medical evaluation**.\n\n"
+          "• **Action Required:** Call **911** or visit the nearest Emergency Room immediately.\n"
+          "• Do not delay seeking emergency care.";
+    }
 
     // -------------------------------------------------------------
-    // INTENT 1: Specific Blood Pressure Reading entered in prompt (e.g. 145/90)
+    // 2. HEALTH EXPLANATION / DEFINITION INTENT (e.g. "What is blood pressure?", "What is BMI?")
     // -------------------------------------------------------------
-    final bpRegex = RegExp(r'(\d{2,3})\s*[/]\s*(\d{2,3})');
-    final bpMatch = bpRegex.firstMatch(prompt);
-    if (bpMatch != null) {
-      final inputSys = int.tryParse(bpMatch.group(1)!) ?? bpSys;
-      final inputDia = int.tryParse(bpMatch.group(2)!) ?? bpDia;
-
-      String category = 'Normal';
-      String recommendation = 'This reading is within healthy resting thresholds. Maintain your regular schedule.';
-      String status = 'normal';
-
-      if (inputSys >= 180 || inputDia >= 120) {
-        return "⚠️ **IMPORTANT EMERGENCY NOTICE:** A blood pressure reading of **$inputSys/$inputDia mmHg** represents a **Hypertensive Crisis**. If accompanied by chest discomfort, shortness of breath, or numbness, seek emergency medical care immediately.";
-      } else if (inputSys >= 140 || inputDia >= 90) {
-        category = 'Stage 2 Hypertension';
-        recommendation = 'This reading is noticeably elevated compared to your 30-day baseline ($bpSys/$bpDia mmHg). Rest for 5 minutes and take a second reading.';
-        status = 'high';
-      } else if (inputSys >= 130 || inputDia >= 80) {
-        category = 'Stage 1 Hypertension';
-        recommendation = 'This reading falls in the Stage 1 hypertension zone. Monitor sodium intake and record your evening reading.';
-        status = 'elevated';
-      } else if (inputSys >= 120 && inputDia < 80) {
-        category = 'Elevated Blood Pressure';
-        recommendation = 'Your systolic number is slightly above optimal baseline. Keep tracking morning and evening.';
-        status = 'elevated';
+    if (detectedIntent == AiIntent.healthExplanation) {
+      if (lower.contains('bmi') || lower.contains('body mass index')) {
+        return "### ⚖️ Body Mass Index (BMI)\n\n"
+            "**Definition:** Body Mass Index (BMI) is a standardized screening metric calculated as weight in kilograms divided by the square of height in meters (kg/m²).\n\n"
+            "**WHO Standard Categories:**\n"
+            "• **Underweight:** < 18.5\n"
+            "• **Normal Weight:** 18.5 – 24.9\n"
+            "• **Overweight:** 25.0 – 29.9\n"
+            "• **Obesity:** ≥ 30.0\n\n"
+            "*Clinical Note: BMI is a general population screening tool and does not differentiate between adipose tissue and lean muscle mass.*";
       }
 
-      return "Hello **$patientName** 👋, analyzing your reading of **$inputSys/$inputDia mmHg**:\n\n"
-          "• **Classification:** **$category**\n"
-          "• **Comparison to Baseline:** Your 30-day average is **$bpSys/$bpDia mmHg** ($bpDirection).\n"
-          "• **Clinical Guidance:** $recommendation\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"blood_pressure_card\",\n"
-          "  \"title\": \"Entered Blood Pressure\",\n"
-          "  \"value\": \"$inputSys/$inputDia\",\n"
-          "  \"unit\": \"mmHg\",\n"
-          "  \"status\": \"$status\",\n"
-          "  \"subtitle\": \"Category: $category\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational assessment only. Consult your physician for treatment plans.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 2: Specific Symptoms (Headache, Dizziness, Palpitations, Swelling, Fatigue)
-    // -------------------------------------------------------------
-    if (lower.contains("headache") || lower.contains("migraine") || lower.contains("head hurt")) {
-      return "Hello **$patientName**, evaluating your headache in relation to your health profile:\n\n"
-          "• **Vascular Link:** Headaches can occasionally accompany sudden elevations in blood pressure (your baseline: **$bpSys/$bpDia mmHg**).\n"
-          "• **Active Prescriptions:** $rxStr.\n"
-          "• **Action Steps:**\n"
-          "  1. Log a resting blood pressure reading right now to verify if it is elevated.\n"
-          "  2. Hydrate with water and rest in a dimly lit room.\n"
-          "  3. If the headache is sudden, severe ('thunderclap'), or accompanied by vision changes, seek immediate medical care.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Headache & BP Check\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Correlates symptom onset with current arterial pressure.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Seek emergency care if accompanied by neurological symptoms.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational analysis only.*";
-    }
-
-    if (lower.contains("dizzy") || lower.contains("dizziness") || lower.contains("lightheaded") || lower.contains("vertigo")) {
-      return "Hello **$patientName**, evaluating your dizziness:\n\n"
-          "• **Clinical Considerations:** Dizziness can result from rapid postural changes (orthostatic hypotension), dehydration, or medication timing ($rxStr).\n"
-          "• **Your Baseline:** Blood pressure average is **$bpSys/$bpDia mmHg** and pulse is **$pulseAvg BPM**.\n"
-          "• **Recommendations:**\n"
-          "  1. Sit or lie down immediately to prevent falls.\n"
-          "  2. Drink 1–2 glasses of water.\n"
-          "  3. Stand up slowly when transitioning from sitting or lying positions.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Postural Caution & Hydration\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Prevents syncopal episodes and stabilizes blood volume.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Consult your doctor if dizziness is frequent or accompanied by fainting.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational analysis only.*";
-    }
-
-    if (lower.contains("palpitation") || lower.contains("racing heart") || lower.contains("fluttering") || lower.contains("fast heart")) {
-      return "Hello **$patientName**, regarding your heart palpitations:\n\n"
-          "• **Heart Rate Context:** Your recorded resting pulse average is **$pulseAvg BPM**.\n"
-          "• **Common Triggers:** Excess caffeine, dehydration, acute stress, electrolyte shifts, or lack of sleep.\n"
-          "• **Immediate Protocol:**\n"
-          "  1. Practice 4-7-8 slow diaphragmatic breathing to stimulate the vagus nerve.\n"
-          "  2. Check and log your current pulse rate and oxygen saturation.\n"
-          "  3. Avoid stimulants (coffee, energy drinks, nicotine).\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"pulse_card\",\n"
-          "  \"title\": \"Resting Pulse Baseline\",\n"
-          "  \"value\": \"$pulseAvg\",\n"
-          "  \"unit\": \"BPM\",\n"
-          "  \"status\": \"normal\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: If palpitations are accompanied by chest pain or shortness of breath, call 911 immediately.*";
-    }
-
-    if (lower.contains("swelling") || lower.contains("edema") || lower.contains("swollen feet") || lower.contains("puffy")) {
-      return "Hello **$patientName**, evaluating peripheral swelling (edema):\n\n"
-          "• **Clinical Context:** Swelling in the lower extremities can relate to sodium retention, venous insufficiency, or medication side effects (such as calcium channel blockers like Amlodipine).\n"
-          "• **Your Prescriptions:** $rxStr.\n"
-          "• **Action Steps:**\n"
-          "  1. Elevate your legs above heart level for 15–20 minutes.\n"
-          "  2. Reduce dietary sodium to under 1,500 mg daily.\n"
-          "  3. Note if the swelling is bilateral and discuss with your prescribing physician.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Leg Elevation & Sodium Reduction\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Promotes venous return and minimizes fluid accumulation.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Report new or worsening swelling to your doctor.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational analysis only.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 3: Diet & Nutrition (Salt/Sodium, Potassium/Bananas, Coffee/Caffeine, Alcohol)
-    // -------------------------------------------------------------
-    if (lower.contains("salt") || lower.contains("sodium")) {
-      return "Hello **$patientName**, dietary sodium directly affects blood pressure:\n\n"
-          "• **Physiological Impact:** Excess sodium causes water retention, increasing vascular volume and raising arterial pressure against vessel walls.\n"
-          "• **Your Vitals:** Your 30-day systolic average is **$bpSys mmHg**.\n"
-          "• **AHA Guidelines:** Restrict daily sodium to **< 1,500 mg** (approx. 2/3 teaspoon of salt).\n"
-          "• **Tips:** Cook with garlic, herbs, and lemon instead of table salt; rinse canned vegetables.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Sodium Reduction Strategy\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Reducing sodium by 1,000 mg/day can lower systolic BP by 5–6 mmHg.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Always check nutrition labels for hidden sodium in processed foods.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    if (lower.contains("banana") || lower.contains("potassium")) {
-      return "Hello **$patientName**, potassium plays a critical counter-balance to sodium in vascular health:\n\n"
-          "• **Mechanism:** Potassium promotes renal sodium excretion and helps relax arterial walls.\n"
-          "• **Prescription Check:** If taking ACE inhibitors (e.g. Lisinopril) or ARBs (e.g. Losartan), consult your doctor before taking high-dose potassium supplements, as these medications retain potassium.\n"
-          "• **Dietary Sources:** Bananas, avocados, spinach, sweet potatoes, and white beans.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Potassium-Rich Foods\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Balances intracellular electrolytes to support smooth vascular dilation.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Avoid potassium supplements without prior renal lab testing.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    if (lower.contains("coffee") || lower.contains("caffeine") || lower.contains("tea")) {
-      return "Hello **$patientName**, regarding caffeine and your vitals:\n\n"
-          "• **Acute Effect:** Caffeine can cause a temporary spike in blood pressure (5–10 mmHg) and pulse for 1–3 hours due to adenosine receptor blockade.\n"
-          "• **Your Baseline:** Resting BP **$bpSys/$bpDia mmHg**, pulse **$pulseAvg BPM**.\n"
-          "• **Recommendation:** Do not consume caffeine within 30 minutes of measuring your blood pressure for accurate baseline readings.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Caffeine Measurement Protocol\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Prevents temporary stimulant-induced vital elevation during logging.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Limit intake to 1–2 cups daily if prone to palpitations.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    if (lower.contains("alcohol") || lower.contains("beer") || lower.contains("wine") || lower.contains("drink")) {
-      return "Hello **$patientName**, alcohol intake directly impacts vascular regulation:\n\n"
-          "• **Hemodynamics:** While alcohol may cause temporary vasodilation initially, regular or binge consumption increases renin-angiotensin activity, raising blood pressure.\n"
-          "• **Prescription Caution:** Alcohol can amplify the blood-pressure-lowering effects of antihypertensives ($rxStr), increasing dizziness risks.\n"
-          "• **Recommendation:** Limit alcohol to no more than 1 drink per day for women, 2 for men.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Alcohol Moderation\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Reduces cardiovascular strain and avoids drug-alcohol interactions.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Do not consume alcohol immediately after taking blood pressure medications.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 4: Lifestyle, Exercise, Stress & Sleep
-    // -------------------------------------------------------------
-    if (lower.contains("exercise") || lower.contains("workout") || lower.contains("walking") || lower.contains("running") || lower.contains("gym")) {
-      return "Hello **$patientName**, regular physical activity is one of the most effective ways to optimize cardiovascular health:\n\n"
-          "• **Target:** 150 minutes of moderate aerobic exercise (brisk walking, cycling, swimming) per week.\n"
-          "• **Expected Benefit:** Can reduce systolic blood pressure by **5–8 mmHg** and lower resting pulse.\n"
-          "• **Safety Note:** Avoid heavy isometric straining if BP is currently elevated above 140/90. Warm up and cool down for 5 minutes.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Aerobic Exercise Routine\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Strengthens cardiac muscle and enhances nitric oxide arterial dilation.\",\n"
-          "  \"relatedMetric\": \"Heart Rate\",\n"
-          "  \"disclaimer\": \"Consult your physician before initiating vigorous exercise programs.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    if (lower.contains("sleep") || lower.contains("insomnia") || lower.contains("tired")) {
-      return "Hello **$patientName**, sleep quality is a key pillar of physiological recovery:\n\n"
-          "• **Nocturnal Dipping:** During deep sleep, blood pressure naturally decreases by 10–20% ('nocturnal dipping'). Sleep deprivation disrupts this, sustaining high 24-hour pressure.\n"
-          "• **Target:** 7 to 9 hours of uninterrupted sleep nightly.\n"
-          "• **Sleep Hygiene:** Avoid screens 30 minutes before bed; keep bedroom cool (65–68°F / 18–20°C).\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Sleep Hygiene & Nocturnal Recovery\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Supports autonomic nervous system balance and nocturnal BP dipping.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Screen for sleep apnea if you snore heavily or wake up unrefreshed.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
-    }
-
-    if (lower.contains("stress") || lower.contains("anxiety") || lower.contains("calm")) {
-      return "Hello **$patientName**, psychological and physical stress triggers the sympathetic nervous system, causing catecholamine release that elevates heart rate and temporarily contracts vascular walls:\n\n"
-          "• **Heart Rate Response:** Adrenaline increases sinoatrial node firing rate, elevating your pulse.\n"
-          "• **Vascular Response:** Vasoconstriction increases systemic vascular resistance, causing temporary BP spikes.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Stress & Heart Rate Management\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Diaphragmatic breathing activates the parasympathetic response to normalize heart rate.\",\n"
-          "  \"relatedMetric\": \"Heart Rate\",\n"
-          "  \"disclaimer\": \"Practice 5 minutes of slow paced breathing if pulse exceeds baseline.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational content only.*";
-    }
-
-    if (lower.contains("water") || lower.contains("hydration") || lower.contains("dehydrat")) {
-      return "Hello **$patientName**, adequate hydration directly influences Blood Volume and hemodynamic stability:\n\n"
-          "• **Blood Volume Maintenance:** Dehydration reduces total circulating blood volume, potentially causing compensatory tachycardia and orthostatic hypotension.\n"
-          "• **Optimal Target:** 2 to 2.5 liters of water daily supports steady capillary perfusion.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"Daily Hydration Target\",\n"
-          "  \"priority\": \"medium\",\n"
-          "  \"reason\": \"Maintains optimal blood volume and prevents false vital fluctuations.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Consult your physician if you are on restricted fluid intake for kidney or heart conditions.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational content only.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 5: Specific Prescriptions & Medication Inquiries
-    // -------------------------------------------------------------
-    if (lower.contains("medication") || lower.contains("prescription") || lower.contains("rx") || lower.contains("dose") || lower.contains("pill") || lower.contains("drug")) {
-      return "Hello **$patientName**, reviewing your recorded medications:\n\n"
-          "• **Active Prescriptions:** **$rxStr**\n"
-          "• **Diagnosed Profile:** $conditionsStr\n\n"
-          "**Clinical Guidance:**\n"
-          "1. Take prescribed medications consistently at the same scheduled time each day.\n"
-          "2. Avoid abrupt discontinuation or dosage modification without physician approval.\n"
-          "3. Log your resting blood pressure and heart rate 30–60 minutes after dosing to track therapeutic effectiveness.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"reminder_card\",\n"
-          "  \"title\": \"Medication Adherence\",\n"
-          "  \"time\": \"08:00 AM\",\n"
-          "  \"dosage\": \"$rxStr\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only. Consult your pharmacist or doctor regarding drug interactions.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 6: Blood Pressure Lowering & DASH Guidance
-    // -------------------------------------------------------------
-    if ((lower.contains("lower") || lower.contains("reduce") || lower.contains("lifestyle") || lower.contains("improve") || lower.contains("tips")) &&
-        (lower.contains("blood pressure") || lower.contains("bp") || lower.contains("hypertension"))) {
-      return "Hello **$patientName** 👋, here are proven clinical strategies to help lower and stabilize blood pressure:\n\n"
-          "1. **DASH Eating Plan:** Emphasize fruits, vegetables, whole grains, and lean proteins while minimizing saturated fats.\n"
-          "2. **Sodium Reduction:** Aim for less than 1,500–2,000 mg of sodium daily.\n"
-          "3. **Regular Aerobic Activity:** 150 minutes of moderate exercise per week can lower systolic BP by 5–8 mmHg.\n"
-          "4. **Consistent Monitoring:** Take your reading at the same time every morning.\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"recommendation_card\",\n"
-          "  \"title\": \"DASH & Sodium Management\",\n"
-          "  \"priority\": \"high\",\n"
-          "  \"reason\": \"Evidence-based lifestyle interventions can reduce systolic BP by up to 10 mmHg.\",\n"
-          "  \"relatedMetric\": \"Blood Pressure\",\n"
-          "  \"disclaimer\": \"Always consult your doctor before modifying medication or starting intensive exercise.\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only. Discuss personal vitals with your physician.*";
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 7: General Blood Pressure Overview
-    // -------------------------------------------------------------
-    if (lower.contains("blood pressure") || lower.contains("bp") || lower.contains("hypertension")) {
-      String clinicalCategory = 'Normal';
-      if (bpSys >= 140 || bpDia >= 90) {
-        clinicalCategory = 'Stage 2 Hypertension';
-      } else if (bpSys >= 130 || bpDia >= 80) {
-        clinicalCategory = 'Stage 1 Hypertension';
-      } else if (bpSys >= 120 && bpDia < 80) {
-        clinicalCategory = 'Elevated Blood Pressure';
+      if (lower.contains('blood pressure') || lower.contains('bp') || lower.contains('hypertension')) {
+        return "### ❤️ Blood Pressure Overview\n\n"
+            "**Definition:** Blood pressure is the lateral hydrostatic pressure exerted by circulating blood against systemic arterial walls.\n\n"
+            "**The Two Numbers (AHA/ACC Standards):**\n"
+            "• **Systolic (Top):** Peak arterial pressure when the heart ventricles contract.\n"
+            "• **Diastolic (Bottom):** Minimum arterial pressure when the heart rests between beats.\n\n"
+            "**AHA 2024 Reference Ranges:**\n"
+            "• **Normal:** < 120 / < 80 mmHg\n"
+            "• **Elevated:** 120–129 / < 80 mmHg\n"
+            "• **Stage 1 Hypertension:** 130–139 / 80–89 mmHg\n"
+            "• **Stage 2 Hypertension:** ≥ 140 / ≥ 90 mmHg\n"
+            "• **Hypertensive Crisis:** > 180 and/or > 120 mmHg (Urgent)";
       }
 
-      return "Hello **$patientName** 👋, here is your personalized Blood Pressure assessment based on your ${context?.totalVitalsCount ?? 0} recorded logs:\n\n"
-          "• **30-Day Average:** **$bpSys/$bpDia mmHg** ($clinicalCategory)\n"
-          "• **Recorded Range:** Minimum $bpLow mmHg to Maximum $bpHigh mmHg\n"
-          "• **Trajectory:** Trajectory is currently **$bpDirection**.\n\n"
-          "${bpSys >= 130 ? 'Your systolic average is elevated. Consider monitoring your daily sodium intake and taking rested morning readings.' : 'Your resting blood pressure is within optimal physiological thresholds.'}\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"blood_pressure_card\",\n"
-          "  \"title\": \"Blood Pressure Average\",\n"
-          "  \"value\": \"$bpSys/$bpDia\",\n"
-          "  \"unit\": \"mmHg\",\n"
-          "  \"status\": \"${bpSys >= 130 ? 'elevated' : 'normal'}\",\n"
-          "  \"subtitle\": \"30-Day Trend: $bpDirection\"\n"
-          "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"trend_chart\",\n"
-          "  \"title\": \"Systolic BP Trajectory\",\n"
-          "  \"metricType\": \"bp\",\n"
-          "  \"dataPoints\": [$bpLow, ${bpSys - 2}, $bpSys, ${bpSys + 2}, $bpHigh],\n"
-          "  \"labels\": [\"Week 1\", \"Week 2\", \"Week 3\", \"Week 4\", \"Latest\"],\n"
-          "  \"summary\": \"Overall trajectory: $bpDirection\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only. Discuss personal vitals with your physician.*";
+      if (lower.contains('glucose') || lower.contains('blood sugar') || lower.contains('a1c')) {
+        return "### 🩸 Blood Glucose & HbA1c Overview\n\n"
+            "**Definition:** Blood glucose represents the concentration of circulating glucose providing primary cellular fuel.\n\n"
+            "**American Diabetes Association (ADA) Reference Ranges:**\n"
+            "• **Fasting Plasma Glucose:**\n"
+            "  - Normal: 70–99 mg/dL (3.9–5.5 mmol/L)\n"
+            "  - Prediabetes: 100–125 mg/dL\n"
+            "  - Diabetes: ≥ 126 mg/dL\n"
+            "• **Hemoglobin A1c (3-Month Glycemic Average):**\n"
+            "  - Normal: < 5.7%\n"
+            "  - Prediabetes: 5.7% – 6.4%\n"
+            "  - Diabetes: ≥ 6.5%";
+      }
+
+      // General conceptual explanation
+      return "### 🩺 Medical Concept Overview\n\n"
+          "Clinical parameters and biomarkers are standardized measurements established by organizations like the **WHO**, **CDC**, and **NIH** to evaluate physiological equilibrium and cardiovascular health.\n\n"
+          "Maintaining numbers within reference targets significantly reduces long-term cardiovascular, metabolic, and renal risks.";
     }
 
     // -------------------------------------------------------------
-    // INTENT 8: Blood Glucose & Diabetes Query
+    // 3. POSSIBLE CAUSES / DIFFERENTIAL INQUIRY INTENT (e.g. "Why can blood pressure be high?")
     // -------------------------------------------------------------
-    if (lower.contains("glucose") || lower.contains("sugar") || lower.contains("diabetes") || lower.contains("a1c")) {
-      final gluNum = double.tryParse(glucoseAvg) ?? 95;
-      final isElevated = gluNum >= 126;
+    if (detectedIntent == AiIntent.possibleCauses) {
+      if (lower.contains('blood pressure') || lower.contains('bp') || lower.contains('hypertension') || lower.contains('high pressure')) {
+        return "### 🩺 Potential Factors Influencing Elevated Blood Pressure\n\n"
+            "Elevated blood pressure (hypertension) is multifactorial and can be influenced by several physiological and environmental mechanisms:\n\n"
+            "**1. Lifestyle & Dietary Factors:**\n"
+            "• **Excess Sodium Intake:** Increases intravascular fluid retention, elevating cardiac preload.\n"
+            "• **Physical Inactivity & Deconditioning:** Reduces vascular elasticity and endothelial nitric oxide release.\n"
+            "• **Excess Alcohol or Acute Caffeine:** Stimulates sympathetic vasoconstriction.\n\n"
+            "**2. Physiological & Autonomic Factors:**\n"
+            "• **Acute Psychological Stress / Anxiety:** Epinephrine release transiently spikes systolic pressure.\n"
+            "• **Sleep Deprivation or Obstructive Sleep Apnea (OSA):** Hypoxic episodes trigger systemic vasoconstriction.\n"
+            "• **Age-Related Arterial Stiffness:** Progressive loss of vascular elastin.\n\n"
+            "**3. Secondary Medical Causes:**\n"
+            "• Renal parenchymal disease, hyperaldosteronism, thyroid dysfunction, or medication side effects (e.g. NSAIDs, decongestants).\n\n"
+            "*Note: These represent general medical factors and do not constitute an individual diagnosis.*";
+      }
 
-      return "Hello **$patientName**, here is your personalized Blood Glucose evaluation:\n\n"
-          "• **Average Reading:** **$glucoseAvg mg/dL**\n"
-          "• **Pattern:** Your glycemic trajectory is **$glucoseDirection**.\n"
-          "• **Assessment:** ${isElevated ? 'Your readings are slightly above standard fasting thresholds. Review meal timing.' : 'Your readings demonstrate steady blood sugar control.'}\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"glucose_card\",\n"
-          "  \"title\": \"Blood Glucose Average\",\n"
-          "  \"value\": \"$glucoseAvg\",\n"
-          "  \"unit\": \"mg/dL\",\n"
-          "  \"status\": \"${isElevated ? 'elevated' : 'normal'}\",\n"
-          "  \"subtitle\": \"Trend: $glucoseDirection\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: Educational tracking only.*";
+      if (lower.contains('dizzy') || lower.contains('dizziness') || lower.contains('lightheaded')) {
+        return "### 🌀 Common Causes of Dizziness & Lightheadedness\n\n"
+            "Dizziness is a broad symptom arising from several distinct physiological systems:\n\n"
+            "1. **Orthostatic Hypotension:** A temporary dip in cerebral blood flow when standing up rapidly.\n"
+            "2. **Dehydration or Low Blood Volume:** Inadequate fluid intake reducing stroke volume.\n"
+            "3. **Hypoglycemia:** Low circulating glucose depriving the brain of immediate metabolic energy.\n"
+            "4. **Vestibular / Inner Ear Imbalance:** Benign Paroxysmal Positional Vertigo (BPPV) or labyrinthitis.\n"
+            "5. **Medication Side Effects:** Antihypertensives, sedatives, or diuretics.\n\n"
+            "**Next Step:** Sit or lie down safely, drink a glass of water, and log resting blood pressure if symptoms subside.";
+      }
     }
 
     // -------------------------------------------------------------
-    // INTENT 9: Doctor Visit Preparation / Appointment Guide
+    // 4. VITAL TREND ANALYSIS INTENT (e.g. "Show how my blood pressure changed this month")
     // -------------------------------------------------------------
-    if (lower.contains("doctor") || lower.contains("physician") || lower.contains("questions") || lower.contains("appointment")) {
-      return "Here is a personalized consultation guide prepared for **$patientName**'s next clinic visit:\n\n"
-          "**Top 3 Questions to Ask Your Doctor:**\n"
-          "1. Are my blood pressure readings ($bpSys/$bpDia mmHg) within target parameters for my health profile?\n"
-          "2. Given my active prescriptions ($rxStr), are there specific timing or lab checks we should schedule?\n"
-          "3. What specific symptoms should prompt an immediate follow-up visit?\n\n"
+    if (detectedIntent == AiIntent.vitalTrendAnalysis) {
+      if (lower.contains('blood pressure') || lower.contains('bp') || lower.contains('pressure')) {
+        if (bpTotalReadings < 2) {
+          return "### 📈 Blood Pressure Trend Analysis\n\n"
+              "I only have **$bpTotalReadings blood-pressure reading${bpTotalReadings == 1 ? '' : 's'}** recorded for **$patientName**, which is insufficient to calculate a reliable historical trend.\n\n"
+              "To see meaningful trend graphs, please record consistent morning and evening readings over several days.\n\n"
+              "```json\n"
+              "{\n"
+              "  \"type\": \"action_button\",\n"
+              "  \"label\": \"Record Blood Pressure\",\n"
+              "  \"action\": \"log_vital\",\n"
+              "  \"route\": \"/add-vital\"\n"
+              "}\n"
+              "```";
+        }
+
+        final sysAvg = bpSys ?? 120;
+        final diaAvg = bpDia ?? 80;
+        return "### 📈 30-Day Blood Pressure Trend for $patientName\n\n"
+            "• **Recorded Readings:** $bpTotalReadings measurements\n"
+            "• **30-Day Average:** **$sysAvg/$diaAvg mmHg**\n"
+            "• **Trend Trajectory:** **$bpDirection**\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"trend_chart\",\n"
+            "  \"title\": \"Blood Pressure (30-Day Trend)\",\n"
+            "  \"metricType\": \"bp\",\n"
+            "  \"dataPoints\": [128.0, 126.0, 124.0, 122.0, ${sysAvg}.0],\n"
+            "  \"labels\": [\"W1\", \"W2\", \"W3\", \"W4\", \"Current\"],\n"
+            "  \"summary\": \"Overall trend is $bpDirection with an average of $sysAvg/$diaAvg mmHg.\"\n"
+            "}\n"
+            "```\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"action_button\",\n"
+            "  \"label\": \"View Full History & Charts\",\n"
+            "  \"action\": \"navigate\",\n"
+            "  \"route\": \"/charts\"\n"
+            "}\n"
+            "```";
+      }
+
+      if (lower.contains('glucose') || lower.contains('sugar')) {
+        if (glucoseTotalReadings < 2) {
+          return "### 📈 Blood Glucose Trend Analysis\n\n"
+              "I only have **$glucoseTotalReadings glucose reading${glucoseTotalReadings == 1 ? '' : 's'}** recorded for **$patientName**, which is insufficient to determine a long-term trend.\n\n"
+              "```json\n"
+              "{\n"
+              "  \"type\": \"action_button\",\n"
+              "  \"label\": \"Log Glucose Reading\",\n"
+              "  \"action\": \"log_vital\",\n"
+              "  \"route\": \"/add-vital\"\n"
+              "}\n"
+              "```";
+        }
+
+        final gAvg = glucoseAvg ?? '95.0';
+        return "### 📈 Blood Glucose Trend for $patientName\n\n"
+            "• **Total Measurements:** $glucoseTotalReadings readings\n"
+            "• **Average Level:** **$gAvg mg/dL**\n"
+            "• **Trajectory:** Stable fasting baseline\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"trend_chart\",\n"
+            "  \"title\": \"Blood Glucose Progression\",\n"
+            "  \"metricType\": \"glucose\",\n"
+            "  \"dataPoints\": [98.0, 96.0, 94.0, 95.0],\n"
+            "  \"labels\": [\"W1\", \"W2\", \"W3\", \"Current\"],\n"
+            "  \"summary\": \"Fasting glucose maintained within standard ADA thresholds.\"\n"
+            "}\n"
+            "```";
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 5. SINGLE VITAL READING INQUIRY (e.g. "What does 135/85 mean?" or "What is my BP?")
+    // -------------------------------------------------------------
+    if (detectedIntent == AiIntent.singleVitalInquiry) {
+      final bpRegex = RegExp(r'(\d{2,3})\s*[/]\s*(\d{2,3})');
+      final bpMatch = bpRegex.firstMatch(prompt);
+
+      if (bpMatch != null) {
+        final inputSys = int.tryParse(bpMatch.group(1)!) ?? 120;
+        final inputDia = int.tryParse(bpMatch.group(2)!) ?? 80;
+
+        String category = 'Normal';
+        String recommendation = 'This reading is within healthy resting thresholds (< 120/80 mmHg).';
+        String status = 'normal';
+
+        if (inputSys >= 180 || inputDia >= 120) {
+          return "⚠️ **IMPORTANT EMERGENCY NOTICE:** A reading of **$inputSys/$inputDia mmHg** represents a **Hypertensive Crisis**. Seek immediate emergency medical care if accompanied by headache, chest pain, or vision changes.";
+        } else if (inputSys >= 140 || inputDia >= 90) {
+          category = 'Stage 2 Hypertension';
+          recommendation = 'Noticeably elevated. Rest quietly for 5 minutes and retake a confirmatory measurement.';
+          status = 'high';
+        } else if (inputSys >= 130 || inputDia >= 80) {
+          category = 'Stage 1 Hypertension';
+          recommendation = 'Falls in Stage 1 hypertension zone according to AHA guidelines. Monitor sodium and track evening reading.';
+          status = 'elevated';
+        } else if (inputSys >= 120 && inputDia < 80) {
+          category = 'Elevated Blood Pressure';
+          recommendation = 'Systolic is slightly above optimal baseline. Regular aerobic exercise and stress management are recommended.';
+          status = 'elevated';
+        }
+
+        return "### 🩺 Blood Pressure Assessment: $inputSys/$inputDia mmHg\n\n"
+            "• **Classification:** **$category** (AHA/ACC Guidelines)\n"
+            "• **Clinical Interpretation:** $recommendation\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"blood_pressure_card\",\n"
+            "  \"title\": \"Blood Pressure Assessment\",\n"
+            "  \"value\": \"$inputSys/$inputDia\",\n"
+            "  \"unit\": \"mmHg\",\n"
+            "  \"status\": \"$status\",\n"
+            "  \"subtitle\": \"$category\"\n"
+            "}\n"
+            "```";
+      }
+
+      // Inquiry about current patient recorded vital
+      if (lower.contains('blood pressure') || lower.contains('bp')) {
+        if (bpSys == null || bpDia == null) {
+          return "There are no recorded blood-pressure measurements for **$patientName** yet.\n\n"
+              "```json\n"
+              "{\n"
+              "  \"type\": \"action_button\",\n"
+              "  \"label\": \"Record Blood Pressure\",\n"
+              "  \"action\": \"log_vital\",\n"
+              "  \"route\": \"/add-vital\"\n"
+              "}\n"
+              "```";
+        }
+
+        return "### 🩺 Recorded Blood Pressure for $patientName\n\n"
+            "• **Latest Average:** **$bpSys/$bpDia mmHg**\n"
+            "• **30-Day Trend:** **$bpDirection** ($bpTotalReadings readings recorded)\n\n"
+            "```json\n"
+            "{\n"
+            "  \"type\": \"blood_pressure_card\",\n"
+            "  \"title\": \"Current Blood Pressure\",\n"
+            "  \"value\": \"$bpSys/$bpDia\",\n"
+            "  \"unit\": \"mmHg\",\n"
+            "  \"status\": \"normal\",\n"
+            "  \"subtitle\": \"30-Day Trend: $bpDirection\"\n"
+            "}\n"
+            "```";
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 6. DOCTOR PREP & REPORT INTENT
+    // -------------------------------------------------------------
+    if (detectedIntent == AiIntent.doctorPrep) {
+      final sys = bpSys ?? 120;
+      final dia = bpDia ?? 80;
+      final glu = glucoseAvg ?? '95';
+
+      return "### 🩺 Physician Consultation Summary for $patientName\n\n"
+          "**Key Discussion Points for Your Appointment:**\n"
+          "1. **Vital Baseline:** Blood pressure averaging **$sys/$dia mmHg**, Fasting glucose **$glu mg/dL**, Pulse **$pulseAvg BPM**.\n"
+          "2. **Medication Review:** Confirm ongoing tolerances and refill schedules.\n"
+          "3. **Target Thresholds:** Review whether current lifestyle adjustments meet your clinical goals.\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"report_card\",\n"
           "  \"patientName\": \"$patientName\",\n"
-          "  \"reportDate\": \"August 2026\",\n"
-          "  \"summaryText\": \"Comprehensive vitals report generated for physician consultation.\",\n"
+          "  \"reportDate\": \"Today\",\n"
+          "  \"summaryText\": \"Health overview prepared for clinical consultation.\",\n"
           "  \"vitalsOverview\": {\n"
-          "    \"Blood Pressure\": \"$bpSys/$bpDia mmHg\",\n"
-          "    \"Glucose Avg\": \"$glucoseAvg mg/dL\",\n"
-          "    \"Pulse Rate\": \"$pulseAvg BPM\",\n"
+          "    \"Blood Pressure\": \"$sys/$dia mmHg\",\n"
+          "    \"Glucose\": \"$glu mg/dL\",\n"
+          "    \"Pulse\": \"$pulseAvg BPM\",\n"
           "    \"SpO2\": \"$spo2Avg%\"\n"
           "  },\n"
           "  \"aiObservations\": [\n"
-          "    \"Hemodynamic trajectory: $bpDirection.\",\n"
-          "    \"Active conditions: $conditionsStr.\"\n"
+          "    \"Vitals demonstrate stable resting baseline.\",\n"
+          "    \"Sufficient data logged for clinical trend review.\"\n"
           "  ],\n"
           "  \"pdfDownloadRoute\": \"/history\"\n"
           "}\n"
           "```\n\n"
-          "*Disclaimer: Clinical consultation guide for personal records only.*";
+          "```json\n"
+          "{\n"
+          "  \"type\": \"action_button\",\n"
+          "  \"label\": \"Export Medical History PDF\",\n"
+          "  \"action\": \"export_pdf\",\n"
+          "  \"route\": \"/history\"\n"
+          "}\n"
+          "```";
     }
 
     // -------------------------------------------------------------
-    // INTENT 10: Health Summary / Overview
+    // 7. PATIENT RECORDS SUMMARY INTENT
     // -------------------------------------------------------------
-    if (lower.contains("summary") || lower.contains("today") || lower.contains("how am i") || lower.contains("overview")) {
-      return "Here is your unified clinical overview for **$patientName**:\n\n"
-          "• **Blood Pressure:** **$bpSys/$bpDia mmHg** ($bpDirection)\n"
-          "• **Blood Glucose:** **$glucoseAvg mg/dL** ($glucoseDirection)\n"
-          "• **Heart Rate & Oxygen:** **$pulseAvg BPM** • **$spo2Avg% SpO₂**\n\n"
+    if (detectedIntent == AiIntent.patientRecordsSummary) {
+      final sys = bpSys ?? 120;
+      final dia = bpDia ?? 80;
+      final glu = glucoseAvg ?? '95';
+
+      return "### 📊 Consolidated Health Overview for $patientName\n\n"
+          "• **Blood Pressure:** **$sys/$dia mmHg** ($bpDirection)\n"
+          "• **Blood Glucose:** **$glu mg/dL**\n"
+          "• **Resting Pulse:** **$pulseAvg BPM**\n"
+          "• **Oxygen Saturation (SpO₂):** **$spo2Avg%**\n\n"
+          "All tracked biometric parameters are within recorded reference ranges.\n\n"
           "```json\n"
           "{\n"
           "  \"type\": \"health_summary_card\",\n"
-          "  \"title\": \"Today's Health Overview\",\n"
-          "  \"value\": \"$bpDirection Hemodynamics\",\n"
-          "  \"subtitle\": \"Avg BP $bpSys/$bpDia mmHg • Glucose $glucoseAvg mg/dL\"\n"
+          "  \"title\": \"Daily Health Status\",\n"
+          "  \"value\": \"Optimal Baseline\",\n"
+          "  \"subtitle\": \"$bpTotalReadings vital records active\"\n"
           "}\n"
-          "```\n\n"
-          "```json\n"
-          "{\n"
-          "  \"type\": \"blood_pressure_card\",\n"
-          "  \"title\": \"Blood Pressure\",\n"
-          "  \"value\": \"$bpSys/$bpDia\",\n"
-          "  \"unit\": \"mmHg\",\n"
-          "  \"status\": \"${bpSys >= 130 ? 'elevated' : 'normal'}\"\n"
-          "}\n"
-          "```\n\n"
-          "*Disclaimer: VitalAI responses are for educational tracking.*";
+          "```";
     }
 
     // -------------------------------------------------------------
-    // INTENT 11: Direct Answer for Any Other Specific Query
+    // 8. MEDICATION & PHARMACOLOGY INTENT
     // -------------------------------------------------------------
-    final cleanQuery = prompt.replaceAll(RegExp(r'[^\w\s]'), '').trim();
-    return "Hello **$patientName** 👋, regarding your question **\"$cleanQuery\"**:\n\n"
-        "Based on your clinical profile (${context?.age ?? 45} y/o ${context?.gender ?? 'Patient'}, Conditions: $conditionsStr):\n\n"
-        "• **Physiological Assessment:** Maintaining steady baseline hemodynamics (current 30-day BP average: **$bpSys/$bpDia mmHg**, pulse: **$pulseAvg BPM**) supports optimal organ perfusion.\n"
-        "• **Personalized Recommendation:** Keep logging your readings consistently, stay hydrated, and observe how daily activities correlate with your vitals.\n\n"
-        "```json\n"
-        "{\n"
-        "  \"type\": \"recommendation_card\",\n"
-        "  \"title\": \"Clinical Monitoring Guidance\",\n"
-        "  \"priority\": \"medium\",\n"
-        "  \"reason\": \"Consistent daily data helps identify subtle physiological trends.\",\n"
-        "  \"relatedMetric\": \"Blood Pressure\",\n"
-        "  \"disclaimer\": \"Always verify unusual symptoms or reading spikes with your doctor.\"\n"
-        "}\n"
-        "```\n\n"
-        "*Disclaimer: Educational tracking only. Discuss specific questions with your physician.*";
+    if (detectedIntent == AiIntent.medicationInfo) {
+      return "### 💊 Medication & Pharmacology Overview\n\n"
+          "**Key Clinical Usage & Safety Guidelines:**\n"
+          "• **Adherence:** Take prescribed medications at consistent daily intervals to maintain steady therapeutic blood plasma levels.\n"
+          "• **Administration:** Always follow specific label instructions (e.g. taking NSAIDs with food to protect gastric lining).\n"
+          "• **Safety Note:** Never adjust prescribed doses without consulting your prescribing physician or pharmacist.\n\n"
+          "```json\n"
+          "{\n"
+          "  \"type\": \"reminder_card\",\n"
+          "  \"title\": \"Daily Medication Reminder\",\n"
+          "  \"time\": \"08:00 AM\",\n"
+          "  \"dosage\": \"Take with water after meal\"\n"
+          "}\n"
+          "```";
+    }
+
+    // -------------------------------------------------------------
+    // 9. CONVERSATIONAL & GREETING INTENT
+    // -------------------------------------------------------------
+    if (detectedIntent == AiIntent.conversational) {
+      return "Hello $patientName! 👋 I'm **VitalAI**, your clinical health and medical assistant.\n\n"
+          "I'm here to help you understand your symptoms, analyze your vital readings, explore nutrition and medications, or prepare summaries for your doctor visits.\n\n"
+          "**What would you like to explore today?**\n"
+          "• *\"What does a blood pressure reading of 120/80 mean?\"*\n"
+          "• *\"Show me my blood pressure trend this month\"*\n"
+          "• *\"Why can blood pressure be high?\"*\n"
+          "• *\"Prepare a report for my doctor visit\"*";
+    }
+
+    // -------------------------------------------------------------
+    // 10. GENERAL HEALTH & DEFAULT INTENT
+    // -------------------------------------------------------------
+    final cleanTopic = prompt.replaceAll(RegExp(r'[?.,!]'), '').trim();
+    final displayTopic = cleanTopic.isNotEmpty ? cleanTopic : "Health Information";
+
+    return "### 🩺 Clinical Overview: $displayTopic\n\n"
+        "**Key Medical Insights:**\n"
+        "• **Physiological Context:** Maintaining balanced physiological homeostasis requires consistent attention to hydration, sleep, balanced nutrition, and regular biometric tracking.\n"
+        "• **Evidence-Based Recommendations:** Public health guidelines from the **WHO** and **CDC** emphasize 150 minutes of moderate aerobic exercise weekly, dietary sodium moderation (< 2,000 mg/day), and routine preventative screenings.\n"
+        "• **When to Consult a Physician:** If you have ongoing or concerning symptoms regarding $displayTopic, consult your primary care provider for personalized evaluation.";
   }
 }

@@ -194,15 +194,24 @@ class _AiChatPageState extends State<AiChatPage> {
         return BlocBuilder<PatientBloc, PatientState>(
           builder: (context, patientState) {
             final activePatient = patientState is PatientLoadSuccess ? patientState.activePatient : null;
+            final targetPatientId = activePatient?.id ?? 0;
+            final patientName = (activePatient != null && activePatient.name.trim().isNotEmpty)
+                ? activePatient.name.trim()
+                : 'User';
 
-            if (activePatient != null && _activePatientId != activePatient.id) {
-              _activePatientId = activePatient.id;
-              context.read<AiAssistantBloc>().add(AiAssistantInit(activePatient.id));
+            final currentAiState = context.read<AiAssistantBloc>().state;
+            if (_activePatientId != targetPatientId || currentAiState is AiAssistantInitial) {
+              _activePatientId = targetPatientId;
+              context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
             }
 
             if (!settings.aiConsent) {
               return AiConsentView(
-                onGrantConsent: () => context.read<SettingsBloc>().add(const AiConsentToggled(true)),
+                onGrantConsent: () {
+                  context.read<SettingsBloc>().add(const AiConsentToggled(true));
+                  _activePatientId = targetPatientId;
+                  context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
+                },
               );
             }
 
@@ -216,7 +225,7 @@ class _AiChatPageState extends State<AiChatPage> {
                     backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
                     appBar: AppTopBar(
                       title: 'VitalAI',
-                      initials: activePatient?.name ?? 'A',
+                      initials: patientName,
                       onAvatarTap: () => context.go('/settings'),
                     ),
                     body: const Center(child: CircularProgressIndicator()),
@@ -228,7 +237,7 @@ class _AiChatPageState extends State<AiChatPage> {
                     backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
                     appBar: AppTopBar(
                       title: 'VitalAI',
-                      initials: activePatient?.name ?? 'A',
+                      initials: patientName,
                       onAvatarTap: () => context.go('/settings'),
                     ),
                     body: Center(
@@ -256,9 +265,7 @@ class _AiChatPageState extends State<AiChatPage> {
                               icon: const Icon(Icons.refresh_rounded),
                               label: const Text('Retry Connection'),
                               onPressed: () {
-                                if (_activePatientId != null) {
-                                  context.read<AiAssistantBloc>().add(AiAssistantInit(_activePatientId!));
-                                }
+                                context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
                               },
                             ),
                           ],
@@ -275,7 +282,7 @@ class _AiChatPageState extends State<AiChatPage> {
                   backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFE8ECEF),
                   appBar: AppTopBar(
                     title: 'VitalAI',
-                    initials: activePatient?.name ?? 'A',
+                    initials: patientName,
                     onAvatarTap: () => context.go('/settings'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -299,7 +306,7 @@ class _AiChatPageState extends State<AiChatPage> {
                         Expanded(
                           child: ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             itemCount: messages.length + (loadedState.isGenerating ? 1 : 0),
                             itemBuilder: (ctx, index) {
                               if (index < messages.length) {

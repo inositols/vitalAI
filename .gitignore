@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment & Secret files (NEVER commit to GitHub)
+.env
+.env.*
+*.env
+lib/core/config/app_env.dart
+secrets.dart
+secrets.json

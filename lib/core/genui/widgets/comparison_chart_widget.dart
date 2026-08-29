@@ -17,6 +17,7 @@ class ComparisonChartWidget extends StatelessWidget {
     final labels = model.labels.isEmpty ? ['Log 1', 'Log 2', 'Log 3'] : model.labels;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/genui_component_model.dart';
+import '../services/genui_action_handler.dart';
 import '../../theme/design_tokens.dart';
 import 'disclaimer_card_widget.dart';
 
@@ -14,13 +15,15 @@ class EducationCardWidget extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : AppColors.primary.withValues(alpha: 0.2),
+          width: 1.2,
         ),
         boxShadow: AppShadows.subtle(context),
       ),
@@ -33,7 +36,7 @@ class EducationCardWidget extends StatelessWidget {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: AppColors.secondary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   AppIcons.info,
@@ -47,7 +50,26 @@ class EducationCardWidget extends StatelessWidget {
                   model.title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
+                        fontSize: 15,
                       ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified_user_rounded, size: 12, color: Color(0xFF10B981)),
+                    SizedBox(width: 4),
+                    Text(
+                      'CLINICAL',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -56,57 +78,106 @@ class EducationCardWidget extends StatelessWidget {
           Text(
             model.definition,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  height: 1.45,
+                  height: 1.5,
                   color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                  fontSize: 13.5,
                 ),
           ),
           if (model.normalRange != null && model.normalRange!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : const Color(0xFFE2E8F0),
+                ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.verified_rounded, size: 16, color: AppColors.success),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Normal Target Range: ',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(Icons.verified_rounded, size: 15, color: AppColors.success),
                   ),
-                  Text(
-                    model.normalRange!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                        children: [
+                          const TextSpan(text: 'Normal Standard Range: '),
+                          TextSpan(
+                            text: model.normalRange!,
+                            style: const TextStyle(color: AppColors.success),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
           ],
           if (model.relatedReading.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Related Topics to Explore:',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(
+                  Icons.explore_outlined,
+                  size: 14,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Tap to Ask VitalAI:',
+                  style: TextStyle(
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                   ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: model.relatedReading.map((topic) {
-                return Chip(
-                  label: Text(topic, style: const TextStyle(fontSize: 11)),
-                  backgroundColor: isDark ? AppColors.darkSurface : const Color(0xFFEFF6FF),
-                  side: BorderSide.none,
-                  visualDensity: VisualDensity.compact,
+                return InkWell(
+                  onTap: () => GenUiActionHandler.askFollowUp(context, "Tell me more about $topic"),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.primary.withValues(alpha: 0.15) : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, size: 11, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          topic,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }).toList(),
             ),

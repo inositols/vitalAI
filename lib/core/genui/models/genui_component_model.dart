@@ -380,7 +380,64 @@ class GenUiPatientProfileCardModel extends GenUiComponentModel {
   List<Object?> get props => [type, name, age, gender, primaryCondition];
 }
 
-/// Action Button component model.
+/// Validated destination routes supported across VitalAI.
+class GenUiValidRoutes {
+  static const String dashboard = '/';
+  static const String patients = '/patients';
+  static const String charts = '/charts';
+  static const String aiChat = '/ai-chat';
+  static const String settings = '/settings';
+  static const String reminders = '/reminders';
+  static const String history = '/history';
+  static const String caregiver = '/caregiver';
+  static const String addVital = '/add-vital';
+
+  static const List<String> allRoutes = [
+    dashboard,
+    patients,
+    charts,
+    aiChat,
+    settings,
+    reminders,
+    history,
+    caregiver,
+    addVital,
+  ];
+
+  /// Resolves high-level semantic destination names or raw route strings into a verified app route.
+  static String resolveRoute(String? destination) {
+    if (destination == null || destination.trim().isEmpty) return dashboard;
+    final clean = destination.trim().toLowerCase();
+
+    if (clean == '/history' || clean.contains('history') || clean.contains('records')) {
+      return history;
+    }
+    if (clean == '/charts' || clean == '/vitals' || clean.contains('chart') || clean.contains('trend')) {
+      return charts;
+    }
+    if (clean == '/add-vital' || clean.contains('add') || clean.contains('log_vital')) {
+      return addVital;
+    }
+    if (clean == '/reminders' || clean.contains('reminder') || clean.contains('schedule')) {
+      return reminders;
+    }
+    if (clean == '/patients' || clean.contains('patient') || clean.contains('profile')) {
+      return patients;
+    }
+    if (clean == '/caregiver' || clean.contains('caregiver')) {
+      return caregiver;
+    }
+    if (clean == '/settings' || clean.contains('setting')) {
+      return settings;
+    }
+    if (clean == '/ai-chat' || clean.contains('chat')) {
+      return aiChat;
+    }
+    return dashboard;
+  }
+}
+
+/// Action Button component model with verified route resolution.
 class GenUiActionButtonModel extends GenUiComponentModel {
   final String label;
   final String action;
@@ -394,12 +451,15 @@ class GenUiActionButtonModel extends GenUiComponentModel {
     super.rawJson,
   });
 
+  /// Verified safe route destination.
+  String get verifiedRoute => GenUiValidRoutes.resolveRoute(route);
+
   factory GenUiActionButtonModel.fromJson(Map<String, dynamic> json) {
     return GenUiActionButtonModel(
       type: json['type']?.toString() ?? 'action_button',
       label: json['label']?.toString() ?? json['text']?.toString() ?? 'Action',
       action: json['action']?.toString() ?? 'navigate',
-      route: json['route']?.toString(),
+      route: json['route']?.toString() ?? json['destination']?.toString(),
       rawJson: json,
     );
   }
@@ -431,4 +491,36 @@ class GenUiFallbackModel extends GenUiComponentModel {
 
   @override
   List<Object?> get props => [type, unknownType, message];
+}
+
+/// Strongly typed schema model representing full AI response payload with intent, evidence, components, and verified actions.
+class GenUiStructuredResponse extends Equatable {
+  final String intent;
+  final String answer;
+  final String? uncertaintyNote;
+  final String? evidenceSource;
+  final List<GenUiComponentModel> components;
+  final List<GenUiActionButtonModel> actions;
+  final String? safetyNotice;
+
+  const GenUiStructuredResponse({
+    required this.intent,
+    required this.answer,
+    this.uncertaintyNote,
+    this.evidenceSource,
+    this.components = const [],
+    this.actions = const [],
+    this.safetyNotice,
+  });
+
+  @override
+  List<Object?> get props => [
+        intent,
+        answer,
+        uncertaintyNote,
+        evidenceSource,
+        components,
+        actions,
+        safetyNotice,
+      ];
 }

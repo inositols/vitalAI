@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:vitalai/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_state.dart';
+import '../config/app_env.dart';
 import '../database/db_service.dart';
 import '../notifications/notification_service.dart';
 import '../services/ai_service.dart';
@@ -74,7 +75,7 @@ Future<void> setupLocator() async {
   locator.registerSingleton<SettingsBloc>(settingsBloc);
 
   // 5. AI Gemini Client
-  const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+  const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: AppEnv.defaultGeminiApiKey);
   final initialKey = apiKey.isNotEmpty ? apiKey : geminiApiKey;
   final aiService = AiService(initialKey);
   locator.registerSingleton<AiService>(aiService);
@@ -92,7 +93,10 @@ Future<void> setupLocator() async {
     () => PatientRepositoryImpl(locator<DbService>()),
   );
   locator.registerFactory(
-    () => PatientBloc(patientRepository: locator<PatientRepository>()),
+    () => PatientBloc(
+      patientRepository: locator<PatientRepository>(),
+      authRepository: locator<AuthRepository>(),
+    ),
   );
 
   // 8. Register Dynamic Plugin-Based Modules Dependencies

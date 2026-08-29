@@ -1,15 +1,21 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/repositories/patient_repository.dart';
 import '../../data/models/patient_model.dart';
+import '../../../auth/domain/repositories/auth_repository.dart';
 import 'patient_event.dart';
 import 'patient_state.dart';
 
 class PatientBloc extends Bloc<PatientEvent, PatientState> {
   final PatientRepository _patientRepository;
+  final AuthRepository? _authRepository;
   PatientModel? _activePatient;
 
-  PatientBloc({required this._patientRepository})
-      : super(PatientInitial()) {
+  PatientBloc({
+    required PatientRepository patientRepository,
+    AuthRepository? authRepository,
+  })  : _patientRepository = patientRepository,
+        _authRepository = authRepository,
+        super(PatientInitial()) {
     on<PatientListRequested>(_onPatientListRequested);
     on<PatientSelected>(_onPatientSelected);
     on<PatientSaved>(_onPatientSaved);
@@ -20,10 +26,32 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientListRequested event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      final patients = await _patientRepository.getPatients();
-      // Auto-select first patient if none selected
+      var patients = await _patientRepository.getPatients();
+      if (patients.isEmpty) {
+        final user = _authRepository?.currentUser;
+        String profileName = 'User';
+        if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+          profileName = user.displayName!.trim();
+        } else if (user?.email != null && user!.email!.contains('@')) {
+          profileName = user.email!.split('@')[0];
+        }
+        final initialPatient = PatientModel()
+          ..name = profileName
+          ..medicalConditions = []
+          ..allergies = []
+          ..medications = [];
+        await _patientRepository.savePatient(initialPatient);
+        patients = await _patientRepository.getPatients();
+      }
+
+      // Auto-select first patient if none selected, or refresh active patient
       if (_activePatient == null && patients.isNotEmpty) {
         _activePatient = patients.first;
+      } else if (_activePatient != null && patients.isNotEmpty) {
+        _activePatient = patients.firstWhere(
+          (p) => p.id == _activePatient!.id,
+          orElse: () => patients.first,
+        );
       }
       emit(PatientLoadSuccess(patients: patients, activePatient: _activePatient));
     } catch (e) {
