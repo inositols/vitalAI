@@ -5,6 +5,8 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../data/models/vital_record.dart';
 
+/// Interactive Line Chart for VitalAI using `fl_chart`.
+/// Features smooth cubic spline curves, gradient underlays, dynamic axes, and interactive touch tooltips.
 class HealthLineChart extends StatelessWidget {
   final String activeTab;
   final List<VitalRecord> records;
@@ -23,12 +25,33 @@ class HealthLineChart extends StatelessWidget {
         return 'Blood Glucose Control';
       case 'pulse':
         return 'Pulse Rate (BPM)';
+      case 'spo2':
+        return 'Oxygen (SpO₂)';
       case 'temp':
         return 'Body Temperature';
       case 'weight':
         return 'Weight Progress';
       default:
         return 'Health Trends';
+    }
+  }
+
+  String get metricUnit {
+    switch (activeTab) {
+      case 'bp':
+        return 'mmHg';
+      case 'glucose':
+        return 'mg/dL';
+      case 'pulse':
+        return 'BPM';
+      case 'spo2':
+        return '%';
+      case 'temp':
+        return '°C';
+      case 'weight':
+        return 'kg';
+      default:
+        return '';
     }
   }
 
@@ -40,6 +63,8 @@ class HealthLineChart extends StatelessWidget {
         return AppColors.glucoseVital;
       case 'pulse':
         return AppColors.pulseVital;
+      case 'spo2':
+        return AppColors.spo2Vital;
       case 'temp':
         return AppColors.tempVital;
       case 'weight':
@@ -53,8 +78,28 @@ class HealthLineChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
 
+    // Filter records that have data for the activeTab
+    final validRecords = records.where((r) {
+      switch (activeTab) {
+        case 'bp':
+          return r.systolic != null && r.diastolic != null;
+        case 'glucose':
+          return r.glucoseValue != null;
+        case 'pulse':
+          return r.pulseRate != null;
+        case 'spo2':
+          return r.oxygenSaturation != null;
+        case 'temp':
+          return r.bodyTemperature != null;
+        case 'weight':
+          return r.weight != null;
+        default:
+          return false;
+      }
+    }).toList();
+
     return AppCard(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(18.0),
       borderRadius: AppRadius.xxl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,12 +114,12 @@ class HealthLineChart extends StatelessWidget {
                     chartTitle,
                     style: context.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
-                      fontSize: 17,
+                      fontSize: 16.5,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Real-time graphical metrics',
+                    'Interactive fl_chart metrics',
                     style: context.textTheme.bodySmall?.copyWith(
                       color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
@@ -92,20 +137,20 @@ class HealthLineChart extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           AnimatedSwitcher(
             duration: AppDurations.normal,
             child: SizedBox(
               key: ValueKey<String>(activeTab),
-              height: 260,
-              child: records.isEmpty
+              height: 240,
+              child: validRecords.isEmpty
                   ? const Center(
                       child: Text(
-                        'No vital entries recorded in this range.',
+                        'No readings recorded in this range.',
                         style: TextStyle(color: Color(0xFF94A3B8)),
                       ),
                     )
-                  : LineChart(_buildChartData(context)),
+                  : LineChart(_buildChartData(context, validRecords)),
             ),
           ),
         ],
@@ -130,13 +175,13 @@ class HealthLineChart extends StatelessWidget {
     );
   }
 
-  LineChartData _buildChartData(BuildContext context) {
+  LineChartData _buildChartData(BuildContext context, List<VitalRecord> validRecords) {
     final isDark = context.isDarkMode;
     final List<FlSpot> spots1 = [];
     final List<FlSpot> spots2 = [];
 
-    for (int i = 0; i < records.length; i++) {
-      final r = records[i];
+    for (int i = 0; i < validRecords.length; i++) {
+      final r = validRecords[i];
       final double xVal = i.toDouble();
 
       if (activeTab == 'bp' && r.systolic != null && r.diastolic != null) {
@@ -146,6 +191,8 @@ class HealthLineChart extends StatelessWidget {
         spots1.add(FlSpot(xVal, r.glucoseValue!));
       } else if (activeTab == 'pulse' && r.pulseRate != null) {
         spots1.add(FlSpot(xVal, r.pulseRate!));
+      } else if (activeTab == 'spo2' && r.oxygenSaturation != null) {
+        spots1.add(FlSpot(xVal, r.oxygenSaturation!));
       } else if (activeTab == 'temp' && r.bodyTemperature != null) {
         spots1.add(FlSpot(xVal, r.bodyTemperature!));
       } else if (activeTab == 'weight' && r.weight != null) {
@@ -158,6 +205,31 @@ class HealthLineChart extends StatelessWidget {
     final secondaryColor = AppColors.primary;
 
     return LineChartData(
+      lineTouchData: LineTouchData(
+        handleBuiltInTouches: true,
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipColor: (touchedSpot) => isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+          tooltipRoundedRadius: 10,
+          getTooltipItems: (touchedSpots) {
+            return touchedSpots.map((spot) {
+              final idx = spot.x.toInt();
+              final dt = idx >= 0 && idx < validRecords.length ? validRecords[idx].dateTime : null;
+              final timeStr = dt != null ? '${dt.month}/${dt.day}' : '';
+              final valStr = spot.y.toStringAsFixed(activeTab == 'temp' || activeTab == 'weight' ? 1 : 0);
+
+              return LineTooltipItem(
+                '$valStr $metricUnit\n$timeStr',
+                const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
+              );
+            }).toList();
+          },
+        ),
+      ),
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
@@ -170,17 +242,33 @@ class HealthLineChart extends StatelessWidget {
       titlesData: FlTitlesData(
         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 34,
+            getTitlesWidget: (val, meta) {
+              return Text(
+                val.toInt().toString(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                ),
+              );
+            },
+          ),
+        ),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 32,
-            interval: (records.length / 5).clamp(1.0, 10.0),
+            reservedSize: 28,
+            interval: (validRecords.length / 5).clamp(1.0, 10.0),
             getTitlesWidget: (val, meta) {
               final idx = val.toInt();
-              if (idx >= 0 && idx < records.length) {
-                final dt = records[idx].dateTime;
+              if (idx >= 0 && idx < validRecords.length) {
+                final dt = validRecords[idx].dateTime;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
+                  padding: const EdgeInsets.only(top: 6.0),
                   child: Text(
                     '${dt.month}/${dt.day}',
                     style: TextStyle(
@@ -201,15 +289,16 @@ class HealthLineChart extends StatelessWidget {
         LineChartBarData(
           spots: spots1.isEmpty ? [const FlSpot(0, 0)] : spots1,
           isCurved: true,
+          curveSmoothness: 0.35,
           color: primaryColor,
           barWidth: 3.5,
           isStrokeCapRound: true,
           dotData: FlDotData(
-            show: true,
+            show: validRecords.length <= 15,
             getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
               radius: 4,
               color: Colors.white,
-              strokeWidth: 3,
+              strokeWidth: 2.5,
               strokeColor: primaryColor,
             ),
           ),
@@ -217,7 +306,7 @@ class HealthLineChart extends StatelessWidget {
             show: true,
             gradient: LinearGradient(
               colors: [
-                primaryColor.withValues(alpha: 0.25),
+                primaryColor.withValues(alpha: 0.22),
                 primaryColor.withValues(alpha: 0.0),
               ],
               begin: Alignment.topCenter,
@@ -229,15 +318,16 @@ class HealthLineChart extends StatelessWidget {
           LineChartBarData(
             spots: spots2,
             isCurved: true,
+            curveSmoothness: 0.35,
             color: secondaryColor,
             barWidth: 3.5,
             isStrokeCapRound: true,
             dotData: FlDotData(
-              show: true,
+              show: validRecords.length <= 15,
               getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
                 radius: 4,
                 color: Colors.white,
-                strokeWidth: 3,
+                strokeWidth: 2.5,
                 strokeColor: secondaryColor,
               ),
             ),
@@ -245,7 +335,7 @@ class HealthLineChart extends StatelessWidget {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  secondaryColor.withValues(alpha: 0.2),
+                  secondaryColor.withValues(alpha: 0.18),
                   secondaryColor.withValues(alpha: 0.0),
                 ],
                 begin: Alignment.topCenter,

@@ -31,8 +31,8 @@ class VitalInputFields extends StatelessWidget {
     required this.settings,
   });
 
-  void _step(TextEditingController controller, double delta, {double? min, double? max, bool isInt = true}) {
-    final cur = double.tryParse(controller.text) ?? (min ?? 0);
+  void _step(TextEditingController controller, double delta, {double? min, double? max, bool isInt = true, double defaultBaseline = 100}) {
+    final cur = double.tryParse(controller.text) ?? defaultBaseline;
     var next = cur + delta;
     if (min != null && next < min) next = min;
     if (max != null && next > max) next = max;
@@ -59,13 +59,13 @@ class VitalInputFields extends StatelessWidget {
     }
   }
 
-  // 1. Clean Minimal BP Input (Side-by-side with Expanded to prevent overflow)
+  // 1. Clean Minimal BP Input
   Widget _buildBpInput(BuildContext context) {
     final sys = double.tryParse(systolicController.text);
     final dia = double.tryParse(diastolicController.text);
 
-    String status = 'Normal';
-    Color statusColor = AppColors.secondary;
+    String status = 'Enter Reading';
+    Color statusColor = const Color(0xFF64748B);
 
     if (sys != null && dia != null) {
       if (sys >= 180 || dia >= 120) {
@@ -96,9 +96,10 @@ class VitalInputFields extends StatelessWidget {
               child: _buildCompactBox(
                 label: 'SYS',
                 controller: systolicController,
+                hint: '120',
                 color: AppColors.bpVital,
-                onMinus: () => _step(systolicController, -1, min: 70, max: 240),
-                onPlus: () => _step(systolicController, 1, min: 70, max: 240),
+                onMinus: () => _step(systolicController, -1, min: 70, max: 240, defaultBaseline: 120),
+                onPlus: () => _step(systolicController, 1, min: 70, max: 240, defaultBaseline: 120),
               ),
             ),
             Padding(
@@ -116,9 +117,10 @@ class VitalInputFields extends StatelessWidget {
               child: _buildCompactBox(
                 label: 'DIA',
                 controller: diastolicController,
+                hint: '80',
                 color: AppColors.bpVital,
-                onMinus: () => _step(diastolicController, -1, min: 40, max: 140),
-                onPlus: () => _step(diastolicController, 1, min: 40, max: 140),
+                onMinus: () => _step(diastolicController, -1, min: 40, max: 140, defaultBaseline: 80),
+                onPlus: () => _step(diastolicController, 1, min: 40, max: 140, defaultBaseline: 80),
               ),
             ),
           ],
@@ -152,9 +154,10 @@ class VitalInputFields extends StatelessWidget {
         _buildSingleNumberBox(
           label: 'GLUCOSE LEVEL',
           controller: glucoseController,
+          hint: isMmol ? '5.3' : '95',
           color: AppColors.glucoseVital,
-          onMinus: () => _step(glucoseController, isMmol ? -0.1 : -1, min: 20, max: 500, isInt: !isMmol),
-          onPlus: () => _step(glucoseController, isMmol ? 0.1 : 1, min: 20, max: 500, isInt: !isMmol),
+          onMinus: () => _step(glucoseController, isMmol ? -0.1 : -1, min: 20, max: 500, isInt: !isMmol, defaultBaseline: isMmol ? 5.3 : 95),
+          onPlus: () => _step(glucoseController, isMmol ? 0.1 : 1, min: 20, max: 500, isInt: !isMmol, defaultBaseline: isMmol ? 5.3 : 95),
         ),
         const SizedBox(height: 12),
         Text(
@@ -168,8 +171,12 @@ class VitalInputFields extends StatelessWidget {
   // 3. Clean Minimal SpO2 Input
   Widget _buildSpo2Input(BuildContext context) {
     final spo2 = double.tryParse(spo2Controller.text);
-    final status = (spo2 ?? 98) >= 95 ? 'Normal (95-100%)' : 'Low Saturation';
-    final statusColor = (spo2 ?? 98) >= 95 ? AppColors.secondary : AppColors.warning;
+    final status = spo2 == null
+        ? 'Enter Reading'
+        : (spo2 >= 95 ? 'Normal (95-100%)' : 'Low Saturation');
+    final statusColor = spo2 == null
+        ? const Color(0xFF64748B)
+        : (spo2 >= 95 ? AppColors.secondary : AppColors.warning);
 
     return Column(
       children: [
@@ -178,9 +185,10 @@ class VitalInputFields extends StatelessWidget {
         _buildSingleNumberBox(
           label: 'OXYGEN SATURATION',
           controller: spo2Controller,
+          hint: '98',
           color: AppColors.spo2Vital,
-          onMinus: () => _step(spo2Controller, -1, min: 70, max: 100),
-          onPlus: () => _step(spo2Controller, 1, min: 70, max: 100),
+          onMinus: () => _step(spo2Controller, -1, min: 70, max: 100, defaultBaseline: 98),
+          onPlus: () => _step(spo2Controller, 1, min: 70, max: 100, defaultBaseline: 98),
         ),
         const SizedBox(height: 12),
         const Text(
@@ -193,40 +201,68 @@ class VitalInputFields extends StatelessWidget {
 
   // 4. Clean Minimal Pulse Input
   Widget _buildPulseInput(BuildContext context) {
+    final pulse = double.tryParse(pulseController.text);
+    final status = pulse == null
+        ? 'Enter Reading'
+        : (pulse >= 60 && pulse <= 100 ? 'Normal Resting (60-100)' : (pulse > 100 ? 'Elevated Pulse' : 'Low Pulse'));
+    final statusColor = pulse == null
+        ? const Color(0xFF64748B)
+        : (pulse >= 60 && pulse <= 100 ? AppColors.secondary : AppColors.warning);
+
     return Column(
       children: [
-        _buildStatusPill('Resting Target (60-100 BPM)', AppColors.secondary),
+        _buildStatusPill(status, statusColor),
         const SizedBox(height: 18),
         _buildSingleNumberBox(
           label: 'HEART RATE',
           controller: pulseController,
+          hint: '72',
           color: AppColors.pulseVital,
-          onMinus: () => _step(pulseController, -1, min: 35, max: 220),
-          onPlus: () => _step(pulseController, 1, min: 35, max: 220),
+          onMinus: () => _step(pulseController, -1, min: 30, max: 220, defaultBaseline: 72),
+          onPlus: () => _step(pulseController, 1, min: 30, max: 220, defaultBaseline: 72),
         ),
         const SizedBox(height: 12),
         const Text(
-          'BPM (Beats per minute)',
+          'BPM',
           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8)),
         ),
       ],
     );
   }
 
-  // 5. Clean Minimal Temperature Input
+  // 5. Clean Minimal Body Temperature Input
   Widget _buildTempInput(BuildContext context) {
     final isF = settings.tempUnit == 'F';
+    final temp = double.tryParse(tempController.text);
+
+    String status = 'Enter Reading';
+    Color statusColor = const Color(0xFF64748B);
+
+    if (temp != null) {
+      final inC = isF ? (temp - 32) * 5 / 9 : temp;
+      if (inC >= 38.0) {
+        status = 'Fever';
+        statusColor = AppColors.error;
+      } else if (inC < 36.0) {
+        status = 'Low Temperature';
+        statusColor = AppColors.warning;
+      } else {
+        status = 'Normal';
+        statusColor = AppColors.secondary;
+      }
+    }
 
     return Column(
       children: [
-        _buildStatusPill('Normal Baseline', AppColors.secondary),
+        _buildStatusPill(status, statusColor),
         const SizedBox(height: 18),
         _buildSingleNumberBox(
           label: 'BODY TEMPERATURE',
           controller: tempController,
+          hint: isF ? '98.6' : '36.6',
           color: AppColors.tempVital,
-          onMinus: () => _step(tempController, isF ? -0.1 : -0.1, min: isF ? 90 : 32, max: isF ? 108 : 42, isInt: false),
-          onPlus: () => _step(tempController, isF ? 0.1 : 0.1, min: isF ? 90 : 32, max: isF ? 108 : 42, isInt: false),
+          onMinus: () => _step(tempController, -0.1, min: isF ? 90 : 32, max: isF ? 110 : 43, isInt: false, defaultBaseline: isF ? 98.6 : 36.6),
+          onPlus: () => _step(tempController, 0.1, min: isF ? 90 : 32, max: isF ? 110 : 43, isInt: false, defaultBaseline: isF ? 98.6 : 36.6),
         ),
         const SizedBox(height: 12),
         Text(
@@ -237,20 +273,20 @@ class VitalInputFields extends StatelessWidget {
     );
   }
 
-  // 6. Clean Minimal Weight Input
+  // 6. Clean Minimal Body Weight Input
   Widget _buildWeightInput(BuildContext context) {
     final isLbs = settings.weightUnit == 'lbs';
 
     return Column(
       children: [
-        _buildStatusPill('Weight Entry', AppColors.primary),
         const SizedBox(height: 18),
         _buildSingleNumberBox(
           label: 'BODY WEIGHT',
           controller: weightController,
+          hint: isLbs ? '154.0' : '70.0',
           color: AppColors.weightVital,
-          onMinus: () => _step(weightController, isLbs ? -0.5 : -0.2, min: 20, max: 400, isInt: false),
-          onPlus: () => _step(weightController, isLbs ? 0.5 : 0.2, min: 20, max: 400, isInt: false),
+          onMinus: () => _step(weightController, -0.5, min: isLbs ? 40 : 20, max: isLbs ? 600 : 300, isInt: false, defaultBaseline: isLbs ? 154.0 : 70.0),
+          onPlus: () => _step(weightController, 0.5, min: isLbs ? 40 : 20, max: isLbs ? 600 : 300, isInt: false, defaultBaseline: isLbs ? 154.0 : 70.0),
         ),
         const SizedBox(height: 12),
         Text(
@@ -261,10 +297,50 @@ class VitalInputFields extends StatelessWidget {
     );
   }
 
-  // Compact Number Box for Dual BP inputs inside Expanded (Never overflows)
+  Widget _buildStatusPill(String status, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          color: color,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleChip(String key, String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.glucoseVital : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF64748B),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCompactBox({
     required String label,
     required TextEditingController controller,
+    required String hint,
     required Color color,
     required VoidCallback onMinus,
     required VoidCallback onPlus,
@@ -288,7 +364,7 @@ class VitalInputFields extends StatelessWidget {
             _buildStepper(Icons.remove_rounded, color, onMinus),
             Flexible(
               child: Container(
-                constraints: const BoxConstraints(minWidth: 44, maxWidth: 64),
+                constraints: const BoxConstraints(minWidth: 48, maxWidth: 70),
                 child: TextField(
                   controller: controller,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -298,7 +374,9 @@ class VitalInputFields extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    hintStyle: const TextStyle(color: Color(0xFFCBD5E1)),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
@@ -313,10 +391,10 @@ class VitalInputFields extends StatelessWidget {
     );
   }
 
-  // Single Centered Number Box for standalone metrics
   Widget _buildSingleNumberBox({
     required String label,
     required TextEditingController controller,
+    required String hint,
     required Color color,
     required VoidCallback onMinus,
     required VoidCallback onPlus,
@@ -340,7 +418,7 @@ class VitalInputFields extends StatelessWidget {
           children: [
             _buildStepper(Icons.remove_rounded, color, onMinus),
             Container(
-              width: 90,
+              width: 100,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: TextField(
                 controller: controller,
@@ -351,7 +429,9 @@ class VitalInputFields extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.8,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: Color(0xFFCBD5E1)),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
@@ -366,58 +446,18 @@ class VitalInputFields extends StatelessWidget {
   }
 
   Widget _buildStepper(IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.full),
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
-    );
-  }
-
-  Widget _buildStatusPill(String status, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          Text(status, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleChip(String val, String text, bool isSelected, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.full),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.glucoseVital : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(
-            color: isSelected ? AppColors.glucoseVital : const Color(0xFF94A3B8).withValues(alpha: 0.4),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
           ),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected ? Colors.white : null,
-          ),
+          child: Icon(icon, size: 20, color: color),
         ),
       ),
     );

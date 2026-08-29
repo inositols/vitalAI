@@ -98,6 +98,7 @@ class _AiChatPageState extends State<AiChatPage> {
   void _showAttachmentMenu(BuildContext context, HealthContext? healthContext) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => AttachmentMenuBottomSheet(
         healthContext: healthContext,
