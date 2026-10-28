@@ -20,6 +20,11 @@ import '../widgets/genui_action_button.dart';
 import '../widgets/genui_educational_tip.dart';
 import '../widgets/genui_metric_summary_card.dart';
 import '../widgets/fallback_card_widget.dart';
+import '../widgets/genui_follow_up_suggestions_widget.dart';
+import '../widgets/medication_intake_card_widget.dart';
+import '../widgets/lab_results_card_widget.dart';
+import '../widgets/risk_gauge_card_widget.dart';
+import '../widgets/doctor_checklist_card_widget.dart';
 
 typedef GenUiWidgetBuilderFunction = Widget Function(BuildContext context, GenUiComponentModel model);
 
@@ -38,68 +43,57 @@ class WidgetRegistry {
     _registry[identifier.toLowerCase().trim()] = builder;
   }
 
-  /// Resolve and build widget for a component model.
+  /// Resolve and build widget for a component model using Dart 3 exhaustive pattern matching.
   Widget buildWidget(BuildContext context, GenUiComponentModel model) {
-    // 1. Specific metric check for metric summaries
-    if (model is GenUiMetricSummaryModel) {
-      final mType = (model.metricType ?? '').toLowerCase();
-      if (mType == 'bp' || model.type == 'blood_pressure_card') {
-        return BloodPressureCardWidget(model: model);
-      } else if (mType == 'glucose' || model.type == 'glucose_card') {
-        return GlucoseCardWidget(model: model);
-      } else if (mType == 'pulse' || model.type == 'pulse_card') {
-        return PulseCardWidget(model: model);
-      } else if (mType == 'temp' || mType == 'temperature' || model.type == 'temperature_card') {
-        return TemperatureCardWidget(model: model);
-      } else if (mType == 'weight' || model.type == 'weight_card') {
-        return WeightCardWidget(model: model);
-      } else if (mType == 'spo2' || model.type == 'spo2_card') {
-        return Spo2CardWidget(model: model);
-      } else if (model.type == 'health_summary_card') {
-        return HealthSummaryCardWidget(model: model);
-      }
+    // 1. Dynamic registry override if registered explicitly
+    final customBuilder = _registry[model.type.toLowerCase().trim()];
+    if (customBuilder != null) {
+      return customBuilder(context, model);
     }
 
-    // 2. Registry key lookup
-    final builder = _registry[model.type.toLowerCase().trim()];
-    if (builder != null) {
-      return builder(context, model);
-    }
-
-    // 3. Typed fallback mapping
-    if (model is GenUiTrendChartModel) {
-      return GenUiTrendChartWidget(model: model);
-    } else if (model is GenUiComparisonChartModel) {
-      return ComparisonChartWidget(model: model);
-    } else if (model is GenUiEducationCardModel) {
-      return EducationCardWidget(model: model);
-    } else if (model is GenUiRecommendationCardModel) {
-      return RecommendationCardWidget(model: model);
-    } else if (model is GenUiReportCardModel) {
-      return ReportCardWidget(model: model);
-    } else if (model is GenUiTimelineCardModel) {
-      return TimelineCardWidget(model: model);
-    } else if (model is GenUiMetricSummaryModel) {
-      return GenUiMetricSummaryCard(model: model);
-    } else if (model is GenUiReminderCardModel) {
-      return ReminderCardWidget(model: model);
-    } else if (model is GenUiAiInsightCardModel) {
-      return AiInsightCardWidget(model: model);
-    } else if (model is GenUiPatientProfileCardModel) {
-      return PatientProfileCardWidget(model: model);
-    } else if (model is GenUiActionButtonModel) {
-      return GenUiActionButtonWidget(model: model);
-    } else if (model is GenUiFallbackModel) {
-      return FallbackCardWidget(model: model);
-    }
-
-    return FallbackCardWidget(
-      model: GenUiFallbackModel(
-        type: 'fallback_card',
-        unknownType: model.type,
-        message: 'Unrecognized component layout',
-      ),
-    );
+    // 2. Exhaustive Dart 3 sealed pattern matching
+    return switch (model) {
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'bp' || m.type == 'blood_pressure_card' =>
+        BloodPressureCardWidget(model: m),
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'glucose' || m.type == 'glucose_card' =>
+        GlucoseCardWidget(model: m),
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'pulse' || m.type == 'pulse_card' =>
+        PulseCardWidget(model: m),
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'temp' ||
+              m.metricType?.toLowerCase() == 'temperature' ||
+              m.type == 'temperature_card' =>
+        TemperatureCardWidget(model: m),
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'weight' || m.type == 'weight_card' =>
+        WeightCardWidget(model: m),
+      GenUiMetricSummaryModel m
+          when m.metricType?.toLowerCase() == 'spo2' || m.type == 'spo2_card' =>
+        Spo2CardWidget(model: m),
+      GenUiMetricSummaryModel m when m.type == 'health_summary_card' =>
+        HealthSummaryCardWidget(model: m),
+      GenUiMetricSummaryModel m => GenUiMetricSummaryCard(model: m),
+      GenUiTrendChartModel m => GenUiTrendChartWidget(model: m),
+      GenUiComparisonChartModel m => ComparisonChartWidget(model: m),
+      GenUiMedicationIntakeModel m => MedicationIntakeCardWidget(model: m),
+      GenUiLabResultsModel m => LabResultsCardWidget(model: m),
+      GenUiRiskGaugeModel m => RiskGaugeCardWidget(model: m),
+      GenUiDoctorChecklistModel m => DoctorChecklistCardWidget(model: m),
+      GenUiEducationCardModel m => EducationCardWidget(model: m),
+      GenUiRecommendationCardModel m => RecommendationCardWidget(model: m),
+      GenUiReportCardModel m => ReportCardWidget(model: m),
+      GenUiTimelineCardModel m => TimelineCardWidget(model: m),
+      GenUiReminderCardModel m => ReminderCardWidget(model: m),
+      GenUiAiInsightCardModel m => AiInsightCardWidget(model: m),
+      GenUiPatientProfileCardModel m => PatientProfileCardWidget(model: m),
+      GenUiActionButtonModel m => GenUiActionButtonWidget(model: m),
+      GenUiFollowUpSuggestionsModel m => GenUiFollowUpSuggestionsWidget(model: m),
+      GenUiFollowUpActionModel m => GenUiFollowUpSuggestionsWidget(model: m),
+      GenUiFallbackModel m => FallbackCardWidget(model: m),
+    };
   }
 
   void _registerDefaults() {
@@ -120,8 +114,29 @@ class WidgetRegistry {
     register('timeline_card', (ctx, m) => TimelineCardWidget(model: m as GenUiTimelineCardModel));
     register('reminder_card', (ctx, m) => ReminderCardWidget(model: m as GenUiReminderCardModel));
     register('medication_card', (ctx, m) => ReminderCardWidget(model: m as GenUiReminderCardModel));
+    register('medication_intake_card', (ctx, m) => MedicationIntakeCardWidget(model: m as GenUiMedicationIntakeModel));
+    register('medication_intake', (ctx, m) => MedicationIntakeCardWidget(model: m as GenUiMedicationIntakeModel));
+    register('pill_reminder', (ctx, m) => MedicationIntakeCardWidget(model: m as GenUiMedicationIntakeModel));
+    register('lab_results_card', (ctx, m) => LabResultsCardWidget(model: m as GenUiLabResultsModel));
+    register('lab_results', (ctx, m) => LabResultsCardWidget(model: m as GenUiLabResultsModel));
+    register('lab_panel', (ctx, m) => LabResultsCardWidget(model: m as GenUiLabResultsModel));
+    register('risk_gauge_card', (ctx, m) => RiskGaugeCardWidget(model: m as GenUiRiskGaugeModel));
+    register('risk_gauge', (ctx, m) => RiskGaugeCardWidget(model: m as GenUiRiskGaugeModel));
+    register('health_risk_gauge', (ctx, m) => RiskGaugeCardWidget(model: m as GenUiRiskGaugeModel));
+    register('doctor_checklist_card', (ctx, m) => DoctorChecklistCardWidget(model: m as GenUiDoctorChecklistModel));
+    register('doctor_checklist', (ctx, m) => DoctorChecklistCardWidget(model: m as GenUiDoctorChecklistModel));
+    register('visit_checklist', (ctx, m) => DoctorChecklistCardWidget(model: m as GenUiDoctorChecklistModel));
     register('ai_insight_card', (ctx, m) => AiInsightCardWidget(model: m as GenUiAiInsightCardModel));
     register('patient_profile_card', (ctx, m) => PatientProfileCardWidget(model: m as GenUiPatientProfileCardModel));
     register('action_button', (ctx, m) => GenUiActionButtonWidget(model: m as GenUiActionButtonModel));
+    register('follow_up_suggestions', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('suggested_actions', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('follow_ups', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('follow_up_question', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('navigation', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('view_vital', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('data_action', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
+    register('information_expansion', (ctx, m) => GenUiFollowUpSuggestionsWidget(model: m));
   }
 }
+

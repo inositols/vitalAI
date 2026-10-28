@@ -80,13 +80,14 @@ class AiIntentClassifier {
 
     // 4. Trend & History Analysis
     if (lower.contains('trend') ||
+        lower.contains('chart') ||
+        lower.contains('graph') ||
         lower.contains('changed this month') ||
         lower.contains('over time') ||
         lower.contains('progression') ||
         lower.contains('history of my') ||
         lower.contains('past month') ||
-        lower.contains('last 30 days') ||
-        lower.contains('chart my')) {
+        lower.contains('last 30 days')) {
       return AiIntent.vitalTrendAnalysis;
     }
 

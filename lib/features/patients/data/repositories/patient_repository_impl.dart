@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import '../../domain/repositories/patient_repository.dart';
 import '../models/patient_model.dart';
+import '../models/clinical_note.dart';
 
 /// Local-first Patient Repository using SharedPreferences via DbService.
 class PatientRepositoryImpl implements PatientRepository {
@@ -101,5 +102,47 @@ class PatientRepositoryImpl implements PatientRepository {
     }
 
     await _dbService.savePatients(list);
+  }
+
+  @override
+  Future<List<ClinicalNote>> getClinicalNotes(int patientId) async {
+    var notes = await _dbService.getClinicalNotes(patientId);
+    if (notes.isEmpty) {
+      notes = _getDefaultNotes(patientId);
+      await _dbService.saveClinicalNotes(patientId, notes);
+    }
+    notes.sort((a, b) => b.date.compareTo(a.date));
+    return notes;
+  }
+
+  @override
+  Future<void> saveClinicalNote(ClinicalNote note) async {
+    final notes = await _dbService.getClinicalNotes(note.patientId);
+    final index = notes.indexWhere((n) => n.id == note.id);
+    if (index != -1) {
+      notes[index] = note;
+    } else {
+      notes.insert(0, note);
+    }
+    await _dbService.saveClinicalNotes(note.patientId, notes);
+  }
+
+  List<ClinicalNote> _getDefaultNotes(int patientId) {
+    return [
+      ClinicalNote(
+        patientId: patientId,
+        visitType: 'General Consultation',
+        content: 'Patient presents for routine cardiovascular and metabolic follow-up. Blood pressure optimal on current regimen (118/76 mmHg). Advised continuation of low-sodium DASH diet and daily aerobic activity.',
+        authorName: 'Dr. Adeyemi',
+        date: DateTime(2025, 4, 22, 10, 30),
+      ),
+      ClinicalNote(
+        patientId: patientId,
+        visitType: 'Follow-up Visit',
+        content: 'Comprehensive review of vital sign trends over the past quarter. Medication compliance confirmed. Blood pressure 122/78 mmHg. No medication side effects reported.',
+        authorName: 'Dr. Adeyemi',
+        date: DateTime(2025, 2, 10, 14, 15),
+      ),
+    ];
   }
 }

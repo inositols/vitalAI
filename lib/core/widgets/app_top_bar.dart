@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/design_tokens.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final Widget? trailing;
   final VoidCallback? onAvatarTap;
+  final VoidCallback? onLeadingTap;
+  final IconData? leadingIcon;
+  final String? leadingTooltip;
   final String? avatarUrl;
   final String? initials;
 
@@ -13,6 +17,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.trailing,
     this.onAvatarTap,
+    this.onLeadingTap,
+    this.leadingIcon,
+    this.leadingTooltip,
     this.avatarUrl,
     this.initials,
   });
@@ -35,23 +42,38 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           children: [
             Row(
               children: [
-                // Signature Medical Cross Badge
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEBF5FF),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF2A365C) : const Color(0xFFD6E9FF),
-                      width: 1,
-                    ),
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.add_rounded,
-                      color: Color(0xFF0062E0),
-                      size: 22,
+                // Signature Medical Cross Badge / Action Button
+                Tooltip(
+                  message: leadingTooltip ?? 'Log Vitals',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onLeadingTap ??
+                          () {
+                            try {
+                              context.push('/add-vital');
+                            } catch (_) {}
+                          },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEBF5FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF2A365C) : const Color(0xFFD6E9FF),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            leadingIcon ?? Icons.add_rounded,
+                            color: const Color(0xFF0062E0),
+                            size: 22,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

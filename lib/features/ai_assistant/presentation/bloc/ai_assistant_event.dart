@@ -34,11 +34,12 @@ class AiAssistantNewChat extends AiAssistantEvent {
 
 class AiAssistantSendMessage extends AiAssistantEvent {
   final String content;
+  final int? patientId;
 
-  const AiAssistantSendMessage(this.content);
+  const AiAssistantSendMessage(this.content, {this.patientId});
 
   @override
-  List<Object?> get props => [content];
+  List<Object?> get props => [content, patientId];
 }
 
 class AiAssistantRetryMessage extends AiAssistantEvent {

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vitalai/core/genui/genui_parser.dart';
 import 'package:vitalai/core/genui/models/genui_component_model.dart';
-import 'package:vitalai/core/genui/services/ai_intent_classifier.dart';
 import 'package:vitalai/core/services/ai_service.dart';
 import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 

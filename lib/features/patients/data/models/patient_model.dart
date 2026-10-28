@@ -41,6 +41,12 @@ class PatientModel {
   /// Doctor's phone number.
   String? doctorPhone;
 
+  /// Patient's personal phone number.
+  String? phone;
+
+  /// Patient's email address.
+  String? email;
+
   /// Additional notes (e.g. blood type, medical history notes).
   String? notes;
 
@@ -77,6 +83,8 @@ class PatientModel {
       'medications': medications,
       'doctorName': doctorName,
       'doctorPhone': doctorPhone,
+      'phone': phone ?? emergencyContact,
+      'email': email,
       'notes': notes,
       'isSynced': isSynced,
       'updatedAt': updatedAt.toIso8601String(),
@@ -95,6 +103,8 @@ class PatientModel {
       ..height = ((json['height'] ?? 170.0) as num).toDouble()
       ..weight = ((json['weight'] ?? 70.0) as num).toDouble()
       ..emergencyContact = json['emergencyContact'] as String? ?? ''
+      ..phone = json['phone'] as String? ?? json['emergencyContact'] as String?
+      ..email = json['email'] as String?
       ..medicalConditions = List<String>.from(json['medicalConditions'] ?? [])
       ..allergies = List<String>.from(json['allergies'] ?? [])
       ..medications = List<String>.from(json['medications'] ?? [])

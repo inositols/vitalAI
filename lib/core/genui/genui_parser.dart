@@ -4,6 +4,11 @@ import 'models/genui_component_model.dart';
 /// Parses raw text or markdown JSON code blocks from Gemini responses into typed GenUI component models.
 class GenUiParser {
   static final _jsonBlockRegex = RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```', caseSensitive: false);
+  static final _xmlGenUiRegex = RegExp(
+    r'<(?:gen[-_]?ui|ui)(?:\s+[^>]*)?>\s*((?:```(?:json)?\s*)?[\{\[][\s\S]*?[\}\]](?:\s*```)?)\s*<\/(?:gen[-_]?ui|ui)>',
+    caseSensitive: false,
+  );
+  static final _strayGenUiRegex = RegExp(r'<\/?(?:gen[-_]?ui|ui)(?:\s+[^>]*)?>', caseSensitive: false);
 
   /// Extracts GenUI components embedded in response text.
   static List<GenUiComponentModel> parseComponents(String rawText) {
@@ -19,7 +24,24 @@ class GenUiParser {
       } catch (_) {}
     }
 
-    // 2. Extract embedded ```json ``` markdown code blocks
+    // 2. Extract from <gen_ui>...</gen_ui> or <ui>...</ui> XML tags
+    final xmlMatches = _xmlGenUiRegex.allMatches(rawText);
+    for (final match in xmlMatches) {
+      var jsonString = match.group(1)?.trim();
+      if (jsonString != null && jsonString.isNotEmpty) {
+        // Strip nested ```json ... ``` if present
+        final codeMatch = _jsonBlockRegex.firstMatch(jsonString);
+        if (codeMatch != null) {
+          jsonString = codeMatch.group(1)?.trim() ?? jsonString;
+        }
+        try {
+          final decoded = jsonDecode(jsonString);
+          _parseDecoded(decoded, components);
+        } catch (_) {}
+      }
+    }
+
+    // 3. Extract embedded ```json ``` markdown code blocks
     final matches = _jsonBlockRegex.allMatches(rawText);
     for (final match in matches) {
       final jsonString = match.group(1)?.trim();
@@ -33,10 +55,18 @@ class GenUiParser {
       }
     }
 
-    return components;
+    // De-duplicate if captured by both XML block and code block
+    final uniqueComponents = <GenUiComponentModel>[];
+    for (final c in components) {
+      if (!uniqueComponents.contains(c)) {
+        uniqueComponents.add(c);
+      }
+    }
+
+    return uniqueComponents;
   }
 
-  /// Removes JSON code blocks from response text for clean natural text rendering.
+  /// Removes JSON code blocks and `&lt;gen_ui&gt;` tags from response text for clean natural text rendering.
   static String cleanText(String rawText) {
     final trimmed = rawText.trim();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
@@ -45,7 +75,10 @@ class GenUiParser {
         if (decoded is Map || decoded is List) return '';
       } catch (_) {}
     }
-    return rawText.replaceAll(_jsonBlockRegex, '').trim();
+    var cleaned = rawText.replaceAll(_xmlGenUiRegex, '');
+    cleaned = cleaned.replaceAll(_jsonBlockRegex, '');
+    cleaned = cleaned.replaceAll(_strayGenUiRegex, '');
+    return cleaned.trim();
   }
 
   static void _parseDecoded(dynamic decoded, List<GenUiComponentModel> targetList) {
@@ -134,6 +167,41 @@ class GenUiParser {
       case 'button':
         return GenUiActionButtonModel.fromJson(map);
 
+      case 'follow_up_suggestions':
+      case 'suggested_actions':
+      case 'follow_ups':
+      case 'suggested_follow_ups':
+        return GenUiFollowUpSuggestionsModel.fromJson(map);
+
+      case 'follow_up_question':
+      case 'follow_up':
+      case 'navigation':
+      case 'navigation_action':
+      case 'view_vital':
+      case 'data_action':
+      case 'information_expansion':
+        return GenUiFollowUpActionModel.fromJson(map);
+
+      case 'medication_intake_card':
+      case 'medication_intake':
+      case 'pill_reminder':
+        return GenUiMedicationIntakeModel.fromJson(map);
+
+      case 'lab_results_card':
+      case 'lab_results':
+      case 'lab_panel':
+        return GenUiLabResultsModel.fromJson(map);
+
+      case 'risk_gauge_card':
+      case 'risk_gauge':
+      case 'health_risk_gauge':
+        return GenUiRiskGaugeModel.fromJson(map);
+
+      case 'doctor_checklist_card':
+      case 'doctor_checklist':
+      case 'visit_checklist':
+        return GenUiDoctorChecklistModel.fromJson(map);
+
       default:
         // Graceful fallback model for unknown types
         if (type.isNotEmpty) {
@@ -143,7 +211,7 @@ class GenUiParser {
     }
   }
 
-  /// Parses a full structured response containing answer text, components, and actions.
+  /// Parses a full structured response containing answer text, components, actions, and follow-ups.
   static GenUiStructuredResponse parseStructuredResponse(
     String rawText, {
     String defaultIntent = 'general_response',
@@ -153,11 +221,18 @@ class GenUiParser {
       final clean = cleanText(rawText);
 
       final actionList = <GenUiActionButtonModel>[];
+      final followUpList = <GenUiFollowUpAction>[];
       final contentComponents = <GenUiComponentModel>[];
 
       for (final comp in components) {
         if (comp is GenUiActionButtonModel) {
           actionList.add(comp);
+        } else if (comp is GenUiFollowUpSuggestionsModel) {
+          followUpList.addAll(comp.suggestions);
+          contentComponents.add(comp);
+        } else if (comp is GenUiFollowUpActionModel) {
+          followUpList.add(comp.action);
+          contentComponents.add(comp);
         } else {
           contentComponents.add(comp);
         }
@@ -168,6 +243,7 @@ class GenUiParser {
         answer: clean.isNotEmpty ? clean : rawText,
         components: contentComponents,
         actions: actionList,
+        followUps: followUpList,
       );
     } catch (_) {
       return GenUiStructuredResponse(
@@ -175,7 +251,9 @@ class GenUiParser {
         answer: rawText,
         components: const [],
         actions: const [],
+        followUps: const [],
       );
     }
   }
 }
+

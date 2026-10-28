@@ -100,7 +100,9 @@ class ChatInputBar extends StatelessWidget {
 
             // 4. Clean Circular Send Button
             Material(
-              color: hasText ? AppColors.primary : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+              color: (hasText && !isGenerating)
+                  ? AppColors.primary
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
@@ -109,22 +111,13 @@ class ChatInputBar extends StatelessWidget {
                   width: 40,
                   height: 40,
                   child: Center(
-                    child: isGenerating
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Icon(
-                            Icons.arrow_upward_rounded,
-                            color: hasText
-                                ? Colors.white
-                                : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                            size: 20,
-                          ),
+                    child: Icon(
+                      Icons.arrow_upward_rounded,
+                      color: (hasText && !isGenerating)
+                          ? Colors.white
+                          : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      size: 20,
+                    ),
                   ),
                 ),
               ),

@@ -301,6 +301,16 @@ class _SettingsPageState extends State<SettingsPage> {
                           _buildDivider(isDark),
                           _buildProfileRow(
                             context,
+                            icon: Icons.biotech_rounded,
+                            iconBg: const Color(0xFFE0F2FE),
+                            iconColor: const Color(0xFF0284C7),
+                            title: 'AI Model Benchmark',
+                            subtitle: 'River AI (GLM-5.3-Flash) vs Gemini',
+                            onTap: () => context.push('/ai-model-test'),
+                          ),
+                          _buildDivider(isDark),
+                          _buildProfileRow(
+                            context,
                             icon: Icons.tune_rounded,
                             iconBg: const Color(0xFFF1F5F9),
                             iconColor: const Color(0xFF475569),

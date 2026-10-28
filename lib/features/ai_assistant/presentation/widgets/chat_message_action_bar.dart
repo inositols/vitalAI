@@ -5,6 +5,7 @@ import '../../../../core/theme/design_tokens.dart';
 class ChatMessageActionBar extends StatelessWidget {
   final bool? feedbackIsPositive;
   final bool isSpeaking;
+  final bool isPaused;
   final VoidCallback onCopy;
   final VoidCallback onToggleThumbsUp;
   final VoidCallback onToggleThumbsDown;
@@ -16,6 +17,7 @@ class ChatMessageActionBar extends StatelessWidget {
     super.key,
     required this.feedbackIsPositive,
     required this.isSpeaking,
+    this.isPaused = false,
     required this.onCopy,
     required this.onToggleThumbsUp,
     required this.onToggleThumbsDown,
@@ -60,9 +62,13 @@ class ChatMessageActionBar extends StatelessWidget {
             onTap: onToggleThumbsDown,
           ),
           _buildActionButton(
-            icon: isSpeaking ? Icons.volume_up_rounded : Icons.volume_up_outlined,
-            tooltip: isSpeaking ? 'Stop audio' : 'Read aloud',
-            color: isSpeaking ? AppColors.tertiary : iconColor,
+            icon: isSpeaking
+                ? Icons.pause_circle_filled_rounded
+                : (isPaused ? Icons.play_circle_fill_rounded : Icons.volume_up_outlined),
+            tooltip: isSpeaking
+                ? 'Pause audio'
+                : (isPaused ? 'Resume audio' : 'Read aloud'),
+            color: (isSpeaking || isPaused) ? AppColors.tertiary : iconColor,
             onTap: onToggleSpeech,
           ),
           if (onRegenerate != null)

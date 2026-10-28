@@ -80,6 +80,9 @@ class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
   }
 
   Future<void> _onSendMessage(AiAssistantSendMessage event, Emitter<AiAssistantState> emit) async {
+    if (event.patientId != null && event.patientId! > 0 && event.patientId != _currentPatientId) {
+      _currentPatientId = event.patientId;
+    }
     if (state is! AiAssistantLoaded || _currentPatientId == null) return;
     final currentState = state as AiAssistantLoaded;
     if (event.content.trim().isEmpty) return;
@@ -237,11 +240,11 @@ class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
           'You can ask me **any question** about your health, symptoms, nutrition, medications, or ask me to interpret your recorded vital trends.\n\n'
           '```json\n'
           '{\n'
-          '  \"type\": \"education_card\",\n'
-          '  \"title\": \"What would you like to explore?\",\n'
-          '  \"definition\": \"I can provide medical insights, log vital readings, set medication reminders, or prepare a summary for your doctor.\",\n'
-          '  \"normalRange\": \"Ready to Assist\",\n'
-          '  \"relatedReading\": [\"Check Blood Pressure\", \"Heart-Healthy Meal Ideas\", \"Dizziness Causes\", \"Today\'s Health Summary\"]\n'
+          '  "type": "education_card",\n'
+          '  "title": "What would you like to explore?",\n'
+          '  "definition": "I can provide medical insights, log vital readings, set medication reminders, or prepare a summary for your doctor.",\n'
+          '  "normalRange": "Ready to Assist",\n'
+          '  "relatedReading": ["Check Blood Pressure", "Heart-Healthy Meal Ideas", "Dizziness Causes", "Today\'s Health Summary"]\n'
           '}\n'
           '```\n\n'
           '*Disclaimer: VitalAI provides educational health guidance and tracking assistance. Consult your physician for medical diagnosis.*',

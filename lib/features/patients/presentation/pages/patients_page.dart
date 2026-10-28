@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/app_brand_logo.dart';
+import '../../../../core/widgets/voice_vitals_top_bar.dart';
 import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_shimmer.dart';
 import '../bloc/patient_bloc.dart';
 import '../bloc/patient_event.dart';
 import '../bloc/patient_state.dart';
 import '../../data/models/patient_model.dart';
-import '../widgets/patient_card_tile.dart';
-import '../widgets/patient_form_modal.dart';
+import 'patient_details_page.dart';
 
+enum PatientFilter {
+  all,
+  recent,
+  followUp,
+}
+
+/// Patients List Screen matching Screen 5 in the concept image.
 class PatientsPage extends StatefulWidget {
   const PatientsPage({super.key});
 
@@ -20,9 +24,9 @@ class PatientsPage extends StatefulWidget {
 }
 
 class _PatientsPageState extends State<PatientsPage> {
-  bool _isSearching = false;
-  String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  PatientFilter _currentFilter = PatientFilter.all;
 
   @override
   void initState() {
@@ -36,203 +40,332 @@ class _PatientsPageState extends State<PatientsPage> {
     super.dispose();
   }
 
-  void _openPatientForm([PatientModel? patient]) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => PatientFormModal(
-        patient: patient,
-        onSave: (savedPatient) {
-          context.read<PatientBloc>().add(PatientSaved(savedPatient));
-        },
-      ),
-    );
+  int _calculateAge(DateTime dob) {
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age > 0 ? age : 34;
   }
 
-  void _confirmDelete(PatientModel patient) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xxl)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
-            SizedBox(width: 10),
-            Text('Delete Profile?'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete "${patient.name}"? All vitals logged under this patient profile will be permanently removed.',
-          style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<PatientBloc>().add(
-                    PatientDeleted(localId: patient.id, remoteId: patient.remoteId),
-                  );
-            },
-            child: const Text('Delete Profile'),
-          ),
-        ],
-      ),
-    );
+  String _formatLastVisit(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return 'Last visit: ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      appBar: AppBar(
-        leading: _isSearching
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  setState(() {
-                    _isSearching = false;
-                    _searchQuery = '';
-                    _searchController.clear();
-                  });
-                },
-              )
-            : null,
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search patient name...',
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                onChanged: (val) => setState(() => _searchQuery = val),
-              )
-            : Row(
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      appBar: const VoiceVitalsTopBar(),
+      body: SafeArea(
+        child: BlocBuilder<PatientBloc, PatientState>(
+          builder: (context, state) {
+            if (state is PatientLoading) {
+              return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+            }
+
+            List<PatientModel> allPatients = [];
+            if (state is PatientLoadSuccess) {
+              allPatients = state.patients;
+            }
+
+            // Filter by search query
+            var filtered = allPatients.where((p) {
+              final query = _searchQuery.toLowerCase();
+              return p.name.toLowerCase().contains(query) ||
+                  p.remoteId.toLowerCase().contains(query) ||
+                  p.medicalConditions.any((c) => c.toLowerCase().contains(query));
+            }).toList();
+
+            // Filter by selected tab (All, Recent, Follow-up)
+            if (_currentFilter == PatientFilter.recent) {
+              filtered = filtered.take(3).toList();
+            } else if (_currentFilter == PatientFilter.followUp) {
+              filtered = filtered.where((p) {
+                final cond = p.medicalConditions.join(' ').toLowerCase();
+                return cond.contains('hypertension') || cond.contains('diabetes') || cond.contains('pregnancy');
+              }).toList();
+            }
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                context.read<PatientBloc>().add(PatientListRequested());
+              },
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 children: [
-                  const AppBrandLogo(
-                    size: 32,
-                    iconSize: 16,
+                  // Screen Header Title & Subtitle
+                  Text(
+                    'Patients',
+                    style: AppTypography.headlineLarge(
+                      color: isDark ? Colors.white : AppColors.secondary,
+                    ),
                   ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Select Profile',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Your patient list',
+                    style: AppTypography.bodyMedium(
+                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Compact Search Field
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                        width: 1,
                       ),
-                      Text(
-                        'Who are you monitoring today?',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: Color(0xFF64748B)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search patients...',
+                        hintStyle: TextStyle(
+                          color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                          fontSize: 14,
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.lightTextSecondary, size: 20),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Filter Chips: All, Recent, Follow-up
+                  Row(
+                    children: [
+                      _buildFilterChip(
+                        label: 'All',
+                        isSelected: _currentFilter == PatientFilter.all,
+                        onTap: () => setState(() => _currentFilter = PatientFilter.all),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: 'Recent',
+                        isSelected: _currentFilter == PatientFilter.recent,
+                        onTap: () => setState(() => _currentFilter = PatientFilter.recent),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: 'Follow-up',
+                        isSelected: _currentFilter == PatientFilter.followUp,
+                        onTap: () => setState(() => _currentFilter = PatientFilter.followUp),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 18),
+
+                  // Empty State or List
+                  if (filtered.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: AppEmptyState(
+                        icon: Icons.person_off_rounded,
+                        title: 'No Patients Found',
+                        message: _searchQuery.isNotEmpty
+                            ? 'No patients match "$_searchQuery".'
+                            : 'No patients in this category.',
+                      ),
+                    )
+                  else
+                    ...filtered.map((patient) {
+                      return _buildPatientCard(context, patient);
+                    }),
                 ],
               ),
-        actions: [
-          if (_isSearching)
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () {
-                setState(() {
-                  _searchQuery = '';
-                  _searchController.clear();
-                });
-              },
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.search_rounded),
-              tooltip: 'Search Profiles',
-              onPressed: () => setState(() => _isSearching = true),
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary
+              : (isDark ? AppColors.darkSurface : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPatientCard(BuildContext context, PatientModel patient) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final age = _calculateAge(patient.dateOfBirth);
+    final genderInitial = patient.gender.isNotEmpty ? patient.gender[0].toUpperCase() : 'F';
+    final primaryCondition = patient.medicalConditions.isNotEmpty
+        ? patient.medicalConditions.first
+        : 'Routine Care';
+
+    // Extract initials
+    final parts = patient.name.split(' ');
+    final initials = parts.length > 1
+        ? '${parts[0][0]}${parts[1][0]}'
+        : (patient.name.isNotEmpty ? patient.name[0] : 'P');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
-      body: BlocBuilder<PatientBloc, PatientState>(
-        builder: (context, state) {
-          if (state is PatientLoading) {
-            return GridView.builder(
-              padding: const EdgeInsets.all(20),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.78,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Select active patient
+            context.read<PatientBloc>().add(PatientSelected(patient));
+            // Navigate to Patient Details
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PatientDetailsPage(patient: patient),
               ),
-              itemCount: 4,
-              itemBuilder: (ctx, index) => const AppShimmer.card(height: 180),
             );
-          }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Avatar Circle
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.subtleTealSurface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.subtleTealBorder),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials.toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
 
-          if (state is PatientLoadSuccess) {
-            final filteredPatients = state.patients.where((p) {
-              return p.name.toLowerCase().contains(_searchQuery.toLowerCase());
-            }).toList();
+                // Name and Clinical Context
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        patient.name,
+                        style: AppTypography.titleMedium(
+                          color: isDark ? Colors.white : AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$genderInitial • $age yrs • $primaryCondition',
+                        style: AppTypography.bodySmall(
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatLastVisit(patient.updatedAt),
+                        style: AppTypography.labelSmall(
+                          color: AppColors.lightTextMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-            if (filteredPatients.isEmpty) {
-              return AppEmptyState(
-                icon: Icons.person_off_rounded,
-                title: 'No Patient Profiles Found',
-                message: _searchQuery.isNotEmpty
-                    ? 'No profiles match "$_searchQuery". Try searching a different name.'
-                    : 'Create your first patient profile to begin recording real-time health vitals.',
-                buttonText: 'Add Patient Profile',
-                onAction: () => _openPatientForm(),
-              );
-            }
-
-            return GridView.builder(
-              padding: const EdgeInsets.all(20),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.78,
-              ),
-              itemCount: filteredPatients.length,
-              itemBuilder: (ctx, index) {
-                final patient = filteredPatients[index];
-                final isActive = state.activePatient?.id == patient.id;
-
-                return PatientCardTile(
-                  patient: patient,
-                  isActive: isActive,
-                  onSelect: () {
-                    context.read<PatientBloc>().add(PatientSelected(patient));
-                    context.go('/');
-                  },
-                  onEdit: () => _openPatientForm(patient),
-                  onDelete: () => _confirmDelete(patient),
-                );
-              },
-            );
-          }
-
-          return const AppEmptyState(
-            icon: Icons.error_outline_rounded,
-            title: 'Unable to Load Profiles',
-            message: 'An error occurred while loading patient records. Please try again.',
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text('Add Patient', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.primary,
-        elevation: 6,
-        onPressed: () => _openPatientForm(),
+                // Right Chevron
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: isDark ? AppColors.darkTextMuted : const Color(0xFFCBD5E1),
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

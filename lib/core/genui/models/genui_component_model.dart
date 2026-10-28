@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-/// Base abstract class for all Generative UI component models parsed from AI structured JSON.
-abstract class GenUiComponentModel extends Equatable {
+/// Sealed base class for all Generative UI component models in Dart 3.
+sealed class GenUiComponentModel extends Equatable {
   final String type;
   final Map<String, dynamic> rawJson;
 
@@ -15,7 +15,7 @@ abstract class GenUiComponentModel extends Equatable {
 }
 
 /// Generic metric card model supporting BP, Glucose, Pulse, SpO2, Temp, Weight & Health Summaries.
-class GenUiMetricSummaryModel extends GenUiComponentModel {
+final class GenUiMetricSummaryModel extends GenUiComponentModel {
   final String title;
   final String value;
   final String unit;
@@ -52,7 +52,7 @@ class GenUiMetricSummaryModel extends GenUiComponentModel {
 }
 
 /// Trend chart component model for single metric tracking over time.
-class GenUiTrendChartModel extends GenUiComponentModel {
+final class GenUiTrendChartModel extends GenUiComponentModel {
   final String title;
   final String metricType;
   final List<double> dataPoints;
@@ -89,7 +89,7 @@ class GenUiTrendChartModel extends GenUiComponentModel {
 }
 
 /// Comparison chart component model comparing two time periods or two metrics.
-class GenUiComparisonChartModel extends GenUiComponentModel {
+final class GenUiComparisonChartModel extends GenUiComponentModel {
   final String title;
   final String series1Name;
   final List<double> series1Data;
@@ -133,7 +133,7 @@ class GenUiComparisonChartModel extends GenUiComponentModel {
 }
 
 /// Educational card component model with definition, illustration, normal range, and reading links.
-class GenUiEducationCardModel extends GenUiComponentModel {
+final class GenUiEducationCardModel extends GenUiComponentModel {
   final String title;
   final String definition;
   final String? normalRange;
@@ -171,7 +171,7 @@ class GenUiEducationCardModel extends GenUiComponentModel {
 }
 
 /// AI Recommendation component model with priority, reason, related metric, and follow-up steps.
-class GenUiRecommendationCardModel extends GenUiComponentModel {
+final class GenUiRecommendationCardModel extends GenUiComponentModel {
   final String title;
   final String priority; // 'high', 'medium', 'low'
   final String reason;
@@ -210,7 +210,7 @@ class GenUiRecommendationCardModel extends GenUiComponentModel {
 }
 
 /// Report card component model for dynamic medical report summaries with PDF download & share capabilities.
-class GenUiReportCardModel extends GenUiComponentModel {
+final class GenUiReportCardModel extends GenUiComponentModel {
   final String patientName;
   final String reportDate;
   final String summaryText;
@@ -250,7 +250,7 @@ class GenUiReportCardModel extends GenUiComponentModel {
 }
 
 /// Health timeline card model showing vital progression over multiple months.
-class GenUiTimelineCardModel extends GenUiComponentModel {
+final class GenUiTimelineCardModel extends GenUiComponentModel {
   final String title;
   final String timeSpan; // e.g. "Last 6 Months"
   final List<Map<String, String>> monthlyEvents; // [{month: 'Jan', note: 'BP 120/80'}]
@@ -291,7 +291,7 @@ class GenUiTimelineCardModel extends GenUiComponentModel {
 }
 
 /// Reminder & medication card model.
-class GenUiReminderCardModel extends GenUiComponentModel {
+final class GenUiReminderCardModel extends GenUiComponentModel {
   final String title;
   final String time;
   final String? dosage;
@@ -322,7 +322,7 @@ class GenUiReminderCardModel extends GenUiComponentModel {
 }
 
 /// AI Insight Card Model.
-class GenUiAiInsightCardModel extends GenUiComponentModel {
+final class GenUiAiInsightCardModel extends GenUiComponentModel {
   final String title;
   final String insight;
   final String? category;
@@ -350,7 +350,7 @@ class GenUiAiInsightCardModel extends GenUiComponentModel {
 }
 
 /// Patient Profile Card Model.
-class GenUiPatientProfileCardModel extends GenUiComponentModel {
+final class GenUiPatientProfileCardModel extends GenUiComponentModel {
   final String name;
   final int age;
   final String gender;
@@ -404,6 +404,69 @@ class GenUiValidRoutes {
     addVital,
   ];
 
+  /// Supported safe route destinations and semantic identifiers.
+  static const Set<String> _safeDestinations = {
+    '/',
+    'dashboard',
+    'home',
+    '/patients',
+    'patients',
+    'patient_profile',
+    '/charts',
+    'charts',
+    '/vitals',
+    'vitals',
+    'blood_pressure_history',
+    'bp_history',
+    'blood_pressure_charts',
+    'bp_charts',
+    'glucose_history',
+    '/history',
+    'history',
+    'records',
+    '/reminders',
+    'reminders',
+    'schedule',
+    '/caregiver',
+    'caregiver',
+    '/settings',
+    'settings',
+    '/add-vital',
+    'add_vital',
+    'log_vital',
+    '/ai-chat',
+    'ai_chat',
+    'chat',
+  };
+
+  /// Validates whether a model-generated destination is supported in our security whitelist.
+  static bool isSafeDestination(String? destination) {
+    if (destination == null || destination.trim().isEmpty) return false;
+    return _safeDestinations.contains(destination.trim().toLowerCase());
+  }
+
+  /// Supported safe vital metrics.
+  static const Set<String> _safeVitals = {
+    'blood_pressure',
+    'bp',
+    'glucose',
+    'blood_sugar',
+    'sugar',
+    'pulse',
+    'heart_rate',
+    'spo2',
+    'oxygen',
+    'temperature',
+    'temp',
+    'weight',
+  };
+
+  /// Validates whether a vital identifier is supported.
+  static bool isSafeVital(String? vital) {
+    if (vital == null || vital.trim().isEmpty) return false;
+    return _safeVitals.contains(vital.trim().toLowerCase());
+  }
+
   /// Resolves high-level semantic destination names or raw route strings into a verified app route.
   static String resolveRoute(String? destination) {
     if (destination == null || destination.trim().isEmpty) return dashboard;
@@ -438,7 +501,7 @@ class GenUiValidRoutes {
 }
 
 /// Action Button component model with verified route resolution.
-class GenUiActionButtonModel extends GenUiComponentModel {
+final class GenUiActionButtonModel extends GenUiComponentModel {
   final String label;
   final String action;
   final String? route;
@@ -468,8 +531,147 @@ class GenUiActionButtonModel extends GenUiComponentModel {
   List<Object?> get props => [type, label, action, route];
 }
 
+/// Conceptual action types for GenUI follow-up interactions.
+enum GenUiActionType {
+  followUpQuestion,
+  navigation,
+  dataAction,
+  informationExpansion,
+  unknown,
+}
+
+/// Strongly typed schema representing an individual contextual follow-up action or question.
+class GenUiFollowUpAction extends Equatable {
+  final String type;
+  final String label;
+  final String? prompt;
+  final String? destination;
+  final String? vital;
+  final Map<String, dynamic> rawJson;
+
+  const GenUiFollowUpAction({
+    required this.type,
+    required this.label,
+    this.prompt,
+    this.destination,
+    this.vital,
+    this.rawJson = const {},
+  });
+
+  GenUiActionType get actionType {
+    final clean = type.toLowerCase().trim();
+    if (clean == 'follow_up_question' || clean == 'follow_up') {
+      return GenUiActionType.followUpQuestion;
+    }
+    if (clean == 'navigation' || clean == 'navigation_action' || clean == 'navigate') {
+      return GenUiActionType.navigation;
+    }
+    if (clean == 'view_vital' || clean == 'data_action' || clean == 'vital_action') {
+      return GenUiActionType.dataAction;
+    }
+    if (clean == 'information_expansion' || clean == 'expand') {
+      return GenUiActionType.informationExpansion;
+    }
+    return GenUiActionType.unknown;
+  }
+
+  bool get isFollowUpQuestion =>
+      actionType == GenUiActionType.followUpQuestion || actionType == GenUiActionType.informationExpansion;
+  bool get isNavigation => actionType == GenUiActionType.navigation;
+  bool get isDataAction => actionType == GenUiActionType.dataAction;
+  bool get isInformationExpansion => actionType == GenUiActionType.informationExpansion;
+
+  /// Effective prompt to query AI assistant.
+  String get effectivePrompt {
+    if (prompt != null && prompt!.trim().isNotEmpty) {
+      return prompt!.trim();
+    }
+    return label.trim();
+  }
+
+  factory GenUiFollowUpAction.fromJson(Map<String, dynamic> json) {
+    return GenUiFollowUpAction(
+      type: json['type']?.toString() ?? 'follow_up_question',
+      label: json['label']?.toString() ?? json['text']?.toString() ?? json['title']?.toString() ?? 'Follow-up',
+      prompt: json['prompt']?.toString() ?? json['query']?.toString(),
+      destination: json['destination']?.toString() ?? json['route']?.toString(),
+      vital: json['vital']?.toString() ?? json['metric']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'label': label,
+        if (prompt != null) 'prompt': prompt,
+        if (destination != null) 'destination': destination,
+        if (vital != null) 'vital': vital,
+      };
+
+  @override
+  List<Object?> get props => [type, label, prompt, destination, vital, rawJson];
+}
+
+/// GenUI component model for a group of suggested follow-up questions and actions.
+final class GenUiFollowUpSuggestionsModel extends GenUiComponentModel {
+  final String? title;
+  final List<GenUiFollowUpAction> suggestions;
+
+  const GenUiFollowUpSuggestionsModel({
+    required super.type,
+    this.title,
+    required this.suggestions,
+    super.rawJson,
+  });
+
+  factory GenUiFollowUpSuggestionsModel.fromJson(Map<String, dynamic> json) {
+    final list = json['suggestions'] as List? ??
+        json['actions'] as List? ??
+        json['follow_ups'] as List? ??
+        json['items'] as List? ??
+        [];
+
+    final parsed = list
+        .whereType<Map<String, dynamic>>()
+        .map((m) => GenUiFollowUpAction.fromJson(m))
+        .toList();
+
+    return GenUiFollowUpSuggestionsModel(
+      type: json['type']?.toString() ?? 'follow_up_suggestions',
+      title: json['title']?.toString(),
+      suggestions: parsed,
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props => [type, title, suggestions];
+}
+
+/// GenUI component model wrapping a single follow-up action.
+final class GenUiFollowUpActionModel extends GenUiComponentModel {
+  final GenUiFollowUpAction action;
+
+  const GenUiFollowUpActionModel({
+    required super.type,
+    required this.action,
+    super.rawJson,
+  });
+
+  factory GenUiFollowUpActionModel.fromJson(Map<String, dynamic> json) {
+    return GenUiFollowUpActionModel(
+      type: json['type']?.toString() ?? 'follow_up_question',
+      action: GenUiFollowUpAction.fromJson(json),
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props => [type, action];
+}
+
 /// Fallback model for unrecognized JSON widget components.
-class GenUiFallbackModel extends GenUiComponentModel {
+final class GenUiFallbackModel extends GenUiComponentModel {
   final String unknownType;
   final String message;
 
@@ -493,6 +695,234 @@ class GenUiFallbackModel extends GenUiComponentModel {
   List<Object?> get props => [type, unknownType, message];
 }
 
+/// Interactive medication intake card model supporting 1-tap taken confirmation and reminder scheduling.
+final class GenUiMedicationIntakeModel extends GenUiComponentModel {
+  final String medicationName;
+  final String dosage;
+  final String scheduledTime;
+  final String? instructions;
+  final String status; // 'pending', 'taken', 'snoozed'
+  final String? frequency;
+
+  const GenUiMedicationIntakeModel({
+    required super.type,
+    required this.medicationName,
+    required this.dosage,
+    required this.scheduledTime,
+    this.instructions,
+    this.status = 'pending',
+    this.frequency,
+    super.rawJson,
+  });
+
+  factory GenUiMedicationIntakeModel.fromJson(Map<String, dynamic> json) {
+    return GenUiMedicationIntakeModel(
+      type: json['type']?.toString() ?? 'medication_intake_card',
+      medicationName: json['medicationName']?.toString() ??
+          json['medication']?.toString() ??
+          json['name']?.toString() ??
+          'Medication',
+      dosage: json['dosage']?.toString() ?? '',
+      scheduledTime: json['scheduledTime']?.toString() ??
+          json['time']?.toString() ??
+          'Today',
+      instructions: json['instructions']?.toString() ?? json['notes']?.toString(),
+      status: json['status']?.toString().toLowerCase() ?? 'pending',
+      frequency: json['frequency']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props =>
+      [type, medicationName, dosage, scheduledTime, instructions, status, frequency];
+}
+
+/// Single lab analyte model with reference range and status classification.
+class LabAnalyte extends Equatable {
+  final String name;
+  final String value;
+  final String unit;
+  final String referenceRange;
+  final String status; // 'normal', 'borderline', 'high', 'low'
+
+  const LabAnalyte({
+    required this.name,
+    required this.value,
+    required this.unit,
+    required this.referenceRange,
+    required this.status,
+  });
+
+  factory LabAnalyte.fromJson(Map<String, dynamic> json) {
+    return LabAnalyte(
+      name: json['name']?.toString() ?? json['analyte']?.toString() ?? 'Test',
+      value: json['value']?.toString() ?? '--',
+      unit: json['unit']?.toString() ?? '',
+      referenceRange: json['referenceRange']?.toString() ?? json['range']?.toString() ?? '',
+      status: json['status']?.toString().toLowerCase() ?? 'normal',
+    );
+  }
+
+  @override
+  List<Object?> get props => [name, value, unit, referenceRange, status];
+}
+
+/// Lab panel result model with individual analytes and PDF export capability.
+final class GenUiLabResultsModel extends GenUiComponentModel {
+  final String panelName;
+  final String collectionDate;
+  final String? labProvider;
+  final List<LabAnalyte> analytes;
+  final String? clinicalNote;
+
+  const GenUiLabResultsModel({
+    required super.type,
+    required this.panelName,
+    required this.collectionDate,
+    this.labProvider,
+    required this.analytes,
+    this.clinicalNote,
+    super.rawJson,
+  });
+
+  factory GenUiLabResultsModel.fromJson(Map<String, dynamic> json) {
+    final rawAnalytes = json['analytes'] as List? ?? json['results'] as List? ?? [];
+    return GenUiLabResultsModel(
+      type: json['type']?.toString() ?? 'lab_results_card',
+      panelName: json['panelName']?.toString() ?? json['title']?.toString() ?? 'Lab Test Results',
+      collectionDate: json['collectionDate']?.toString() ?? json['date']?.toString() ?? 'Recent',
+      labProvider: json['labProvider']?.toString() ?? json['lab']?.toString(),
+      analytes: rawAnalytes
+          .whereType<Map<String, dynamic>>()
+          .map((a) => LabAnalyte.fromJson(a))
+          .toList(),
+      clinicalNote: json['clinicalNote']?.toString() ?? json['summary']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props =>
+      [type, panelName, collectionDate, labProvider, analytes, clinicalNote];
+}
+
+/// Clinical health risk gauge model with score, risk level, and contributing factors.
+final class GenUiRiskGaugeModel extends GenUiComponentModel {
+  final String title;
+  final double scorePercentage;
+  final String riskLevel; // 'low', 'moderate', 'high', 'critical'
+  final String categoryDescription;
+  final List<String> contributingFactors;
+  final String recommendation;
+
+  const GenUiRiskGaugeModel({
+    required super.type,
+    required this.title,
+    required this.scorePercentage,
+    required this.riskLevel,
+    required this.categoryDescription,
+    required this.contributingFactors,
+    required this.recommendation,
+    super.rawJson,
+  });
+
+  factory GenUiRiskGaugeModel.fromJson(Map<String, dynamic> json) {
+    final factors = json['contributingFactors'] as List? ?? json['factors'] as List? ?? [];
+    return GenUiRiskGaugeModel(
+      type: json['type']?.toString() ?? 'risk_gauge_card',
+      title: json['title']?.toString() ?? 'Clinical Risk Assessment',
+      scorePercentage: (json['scorePercentage'] as num?)?.toDouble() ??
+          (json['score'] as num?)?.toDouble() ??
+          10.0,
+      riskLevel: json['riskLevel']?.toString().toLowerCase() ?? 'low',
+      categoryDescription: json['categoryDescription']?.toString() ??
+          json['description']?.toString() ??
+          '',
+      contributingFactors: factors.map((e) => e.toString()).toList(),
+      recommendation: json['recommendation']?.toString() ?? '',
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props =>
+      [type, title, scorePercentage, riskLevel, categoryDescription, contributingFactors, recommendation];
+}
+
+/// Interactive checklist item for medical consultations.
+class ChecklistItem extends Equatable {
+  final String question;
+  final String? category;
+  final bool isChecked;
+
+  const ChecklistItem({
+    required this.question,
+    this.category,
+    this.isChecked = false,
+  });
+
+  factory ChecklistItem.fromJson(Map<String, dynamic> json) {
+    return ChecklistItem(
+      question: json['question']?.toString() ?? json['item']?.toString() ?? '',
+      category: json['category']?.toString(),
+      isChecked: json['isChecked'] == true || json['checked'] == true,
+    );
+  }
+
+  ChecklistItem copyWith({bool? isChecked}) {
+    return ChecklistItem(
+      question: question,
+      category: category,
+      isChecked: isChecked ?? this.isChecked,
+    );
+  }
+
+  @override
+  List<Object?> get props => [question, category, isChecked];
+}
+
+/// Doctor consultation discussion checklist model with checkable items and PDF export.
+final class GenUiDoctorChecklistModel extends GenUiComponentModel {
+  final String title;
+  final String appointmentFocus;
+  final List<ChecklistItem> checklistItems;
+  final String? doctorNotesPlaceholder;
+
+  const GenUiDoctorChecklistModel({
+    required super.type,
+    required this.title,
+    required this.appointmentFocus,
+    required this.checklistItems,
+    this.doctorNotesPlaceholder,
+    super.rawJson,
+  });
+
+  factory GenUiDoctorChecklistModel.fromJson(Map<String, dynamic> json) {
+    final rawItems =
+        json['checklistItems'] as List? ?? json['items'] as List? ?? json['questions'] as List? ?? [];
+    return GenUiDoctorChecklistModel(
+      type: json['type']?.toString() ?? 'doctor_checklist_card',
+      title: json['title']?.toString() ?? 'Doctor Visit Discussion Guide',
+      appointmentFocus: json['appointmentFocus']?.toString() ??
+          json['focus']?.toString() ??
+          'Upcoming Medical Consultation',
+      checklistItems: rawItems.map((item) {
+        if (item is Map<String, dynamic>) {
+          return ChecklistItem.fromJson(item);
+        }
+        return ChecklistItem(question: item.toString());
+      }).toList(),
+      doctorNotesPlaceholder: json['doctorNotesPlaceholder']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  @override
+  List<Object?> get props =>
+      [type, title, appointmentFocus, checklistItems, doctorNotesPlaceholder];
+}
+
 /// Strongly typed schema model representing full AI response payload with intent, evidence, components, and verified actions.
 class GenUiStructuredResponse extends Equatable {
   final String intent;
@@ -501,6 +931,7 @@ class GenUiStructuredResponse extends Equatable {
   final String? evidenceSource;
   final List<GenUiComponentModel> components;
   final List<GenUiActionButtonModel> actions;
+  final List<GenUiFollowUpAction> followUps;
   final String? safetyNotice;
 
   const GenUiStructuredResponse({
@@ -510,6 +941,7 @@ class GenUiStructuredResponse extends Equatable {
     this.evidenceSource,
     this.components = const [],
     this.actions = const [],
+    this.followUps = const [],
     this.safetyNotice,
   });
 
@@ -521,6 +953,8 @@ class GenUiStructuredResponse extends Equatable {
         evidenceSource,
         components,
         actions,
+        followUps,
         safetyNotice,
       ];
 }
+

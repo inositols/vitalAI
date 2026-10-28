@@ -7,6 +7,7 @@ import '../config/app_env.dart';
 import '../database/db_service.dart';
 import '../notifications/notification_service.dart';
 import '../services/ai_service.dart';
+import '../services/ai_audio_service.dart';
 import '../plugin/module_registry.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -22,6 +23,13 @@ import '../../features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 import '../../features/reminders/domain/repositories/reminder_repository.dart';
 import '../../features/reminders/data/repositories/reminder_repository_impl.dart';
 import '../../features/reminders/presentation/bloc/reminders_bloc.dart';
+import '../../features/ai_model_test/data/services/river_ai_service.dart';
+import '../../features/ai_model_test/data/services/gemini_model_provider.dart';
+import '../../features/ai_model_test/presentation/bloc/model_eval_bloc.dart';
+import '../../features/activity/domain/repositories/activity_repository.dart';
+import '../../features/activity/data/repositories/activity_repository_impl.dart';
+import '../../features/activity/presentation/bloc/activity_bloc.dart';
+import '../services/clinical_data_seeder.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -79,6 +87,7 @@ Future<void> setupLocator() async {
   final initialKey = apiKey.isNotEmpty ? apiKey : geminiApiKey;
   final aiService = AiService(initialKey);
   locator.registerSingleton<AiService>(aiService);
+  locator.registerLazySingleton<AiAudioService>(() => AiAudioService());
 
   // 6. Authentication Core (Preload stored session for seamless startup)
   final authRepository = AuthRepositoryImpl(locator<FlutterSecureStorage>());
@@ -134,6 +143,29 @@ Future<void> setupLocator() async {
     () => RemindersBloc(repository: locator<ReminderRepository>()),
   );
 
-  // 11. Initialize Database
+  // 11. AI Model Evaluation Core (River AI & Gemini)
+  final riverAiService = RiverAiService(secureStorage: secureStorage);
+  await riverAiService.init();
+  locator.registerSingleton<RiverAiService>(riverAiService);
+  locator.registerLazySingleton<GeminiModelProvider>(
+    () => GeminiModelProvider(locator<AiService>()),
+  );
+  locator.registerFactory(
+    () => ModelEvalBloc(
+      riverService: locator<RiverAiService>(),
+      geminiService: locator<GeminiModelProvider>(),
+    ),
+  );
+
+  // 12. Clinical Activity Core
+  locator.registerLazySingleton<ActivityRepository>(
+    () => ActivityRepositoryImpl(locator<DbService>()),
+  );
+  locator.registerFactory(
+    () => ActivityBloc(repository: locator<ActivityRepository>()),
+  );
+
+  // 13. Initialize Database and Seed Default Clinical Records
   await dbService.init();
+  await ClinicalDataSeeder.seedDefaultClinicalData(dbService);
 }

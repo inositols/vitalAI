@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/genui/genui_renderer.dart';
+import '../../../../core/services/ai_audio_service.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/models/chat_message.dart';
+import 'ai_audio_playback_bar.dart';
 import 'chat_message_action_bar.dart';
 
 class ChatMessageBubble extends StatefulWidget {
@@ -28,7 +32,32 @@ class ChatMessageBubble extends StatefulWidget {
 
 class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   bool? _feedbackIsPositive;
-  bool _isSpeaking = false;
+  StreamSubscription<AudioPlaybackState>? _audioSub;
+  AudioPlaybackState _playbackState = const AudioPlaybackState();
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      if (locator.isRegistered<AiAudioService>()) {
+        final audio = locator<AiAudioService>();
+        _playbackState = audio.currentState;
+        _audioSub = audio.stateStream.listen((state) {
+          if (mounted) {
+            setState(() {
+              _playbackState = state;
+            });
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _audioSub?.cancel();
+    super.dispose();
+  }
 
   void _copyToClipboard(BuildContext context) {
     Clipboard.setData(ClipboardData(text: widget.message.content));
@@ -36,8 +65,29 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   }
 
   void _toggleSpeech() {
-    setState(() => _isSpeaking = !_isSpeaking);
-    context.showSnackBar(_isSpeaking ? 'Playing audio preview...' : 'Audio playback stopped');
+    try {
+      if (!locator.isRegistered<AiAudioService>()) {
+        context.showSnackBar('Audio service initializing...');
+        return;
+      }
+      final audioService = locator<AiAudioService>();
+      final isCurrentlyActive = _playbackState.isMessageActive(widget.message.id);
+      if (isCurrentlyActive && _playbackState.isPlaying) {
+        audioService.pause();
+        context.showSnackBar('Audio playback paused');
+      } else if (isCurrentlyActive && _playbackState.isPaused) {
+        audioService.resume();
+        context.showSnackBar('Resuming audio playback...');
+      } else {
+        audioService.playMessage(
+          messageId: widget.message.id,
+          rawText: widget.message.content,
+        );
+        context.showSnackBar('Reading response aloud...');
+      }
+    } catch (e) {
+      context.showSnackBar('Audio playback error: $e');
+    }
   }
 
   @override
@@ -160,12 +210,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                   onPressed: widget.onRetry,
                 ),
               ),
-            if (!isPending && !isFailed)
+            if (!isPending && !isFailed) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 4.0, left: 4.0),
                 child: ChatMessageActionBar(
                   feedbackIsPositive: _feedbackIsPositive,
-                  isSpeaking: _isSpeaking,
+                  isSpeaking: _playbackState.isSpeakingMessage(message.id),
+                  isPaused: _playbackState.messageId == message.id && _playbackState.isPaused,
                   onCopy: () => _copyToClipboard(context),
                   onQuote: widget.onQuoteReply != null
                       ? () => widget.onQuoteReply!(message.content)
@@ -186,6 +237,20 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                   onRegenerate: widget.onRegenerate,
                 ),
               ),
+              if (_playbackState.isMessageActive(message.id))
+                AiAudioPlaybackBar(
+                  playbackState: _playbackState,
+                  onPlayPause: () {
+                    if (_playbackState.isPlaying) {
+                      locator<AiAudioService>().pause();
+                    } else {
+                      locator<AiAudioService>().resume();
+                    }
+                  },
+                  onStop: () => locator<AiAudioService>().stop(),
+                  onSpeedChanged: (speed) => locator<AiAudioService>().setSpeechRate(speed),
+                ),
+            ],
           ],
         ),
       );
@@ -258,6 +323,25 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       ),
                     ],
                     if (!isPending && !isFailed) ...[
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: _toggleSpeech,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Icon(
+                            _playbackState.isSpeakingMessage(message.id)
+                                ? Icons.pause_circle_rounded
+                                : (_playbackState.messageId == message.id && _playbackState.isPaused
+                                    ? Icons.play_circle_rounded
+                                    : Icons.volume_up_rounded),
+                            size: 13,
+                            color: _playbackState.isMessageActive(message.id)
+                                ? Colors.white
+                                : Colors.white70,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       const Icon(Icons.done_all_rounded, size: 13, color: Colors.white70),
                     ],
@@ -266,6 +350,24 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
               ],
             ),
           ),
+          if (_playbackState.isMessageActive(message.id))
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.82,
+              ),
+              child: AiAudioPlaybackBar(
+                playbackState: _playbackState,
+                onPlayPause: () {
+                  if (_playbackState.isPlaying) {
+                    locator<AiAudioService>().pause();
+                  } else {
+                    locator<AiAudioService>().resume();
+                  }
+                },
+                onStop: () => locator<AiAudioService>().stop(),
+                onSpeedChanged: (speed) => locator<AiAudioService>().setSpeechRate(speed),
+              ),
+            ),
           if (isFailed && widget.onRetry != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),

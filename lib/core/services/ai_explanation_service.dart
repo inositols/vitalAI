@@ -2,7 +2,7 @@
 /// for common health vital metrics, lab tests, and clinical concepts.
 class AiExplanationService {
   static const String disclaimer =
-      "*Disclaimer: This information is for educational tracking and reference only. Always consult a qualified healthcare provider for diagnosis or medical treatment.*";
+      "*Disclaimer: This information is for educational tracking and reference only and does not constitute medical diagnosis. Always consult a qualified healthcare professional for diagnosis or medical treatment.*";
 
   /// Returns educational explanation for vital metrics and health concepts.
   static String explainMetric(String metricName) {
@@ -11,7 +11,7 @@ class AiExplanationService {
       case 'oxygen_saturation':
       case 'blood_oxygen':
         return "### 🫁 Blood Oxygen Saturation (SpO₂)\n\n"
-            "• **What it is:** SpO₂ measures the percentage of oxygen-carrying hemoglobin in your red blood cells.\n"
+            "• **What it is:** SpO₂ (Blood Oxygen Saturation) measures the percentage of oxygen-carrying hemoglobin in your red blood cells.\n"
             "• **Normal Range:** **95% to 100%** at sea level. Readings below 90% indicate hypoxemia.\n"
             "• **Key Factors:** Lung health, altitude, circulation, and breathing depth all influence SpO₂.\n\n"
             "```json\n"

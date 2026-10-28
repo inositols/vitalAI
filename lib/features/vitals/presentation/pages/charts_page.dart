@@ -5,7 +5,6 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_top_bar.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
-import '../../../settings/presentation/bloc/settings_bloc.dart';
 import '../../data/models/vital_record.dart';
 import '../bloc/vitals_bloc.dart';
 import '../bloc/vitals_event.dart';
@@ -164,7 +163,7 @@ class _ChartsPageState extends State<ChartsPage> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _metricTabs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final tab = _metricTabs[index];
           final isSelected = _activeMetric == tab['id'];

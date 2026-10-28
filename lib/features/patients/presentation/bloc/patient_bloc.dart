@@ -6,16 +6,14 @@ import 'patient_event.dart';
 import 'patient_state.dart';
 
 class PatientBloc extends Bloc<PatientEvent, PatientState> {
-  final PatientRepository _patientRepository;
-  final AuthRepository? _authRepository;
+  final PatientRepository patientRepository;
+  final AuthRepository? authRepository;
   PatientModel? _activePatient;
 
   PatientBloc({
-    required PatientRepository patientRepository,
-    AuthRepository? authRepository,
-  })  : _patientRepository = patientRepository,
-        _authRepository = authRepository,
-        super(PatientInitial()) {
+    required this.patientRepository,
+    this.authRepository,
+  }) : super(PatientInitial()) {
     on<PatientListRequested>(_onPatientListRequested);
     on<PatientSelected>(_onPatientSelected);
     on<PatientSaved>(_onPatientSaved);
@@ -26,9 +24,9 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientListRequested event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      var patients = await _patientRepository.getPatients();
+      var patients = await patientRepository.getPatients();
       if (patients.isEmpty) {
-        final user = _authRepository?.currentUser;
+        final user = authRepository?.currentUser;
         String profileName = 'User';
         if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
           profileName = user.displayName!.trim();
@@ -40,8 +38,8 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
           ..medicalConditions = []
           ..allergies = []
           ..medications = [];
-        await _patientRepository.savePatient(initialPatient);
-        patients = await _patientRepository.getPatients();
+        await patientRepository.savePatient(initialPatient);
+        patients = await patientRepository.getPatients();
       }
 
       // Auto-select first patient if none selected, or refresh active patient
@@ -63,7 +61,7 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientSelected event, Emitter<PatientState> emit) async {
     _activePatient = event.patient;
     try {
-      final patients = await _patientRepository.getPatients();
+      final patients = await patientRepository.getPatients();
       emit(PatientLoadSuccess(patients: patients, activePatient: _activePatient));
     } catch (e) {
       emit(PatientFailure(e.toString()));
@@ -74,9 +72,9 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientSaved event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      await _patientRepository.savePatient(event.patient);
+      await patientRepository.savePatient(event.patient);
       _activePatient = event.patient;
-      final patients = await _patientRepository.getPatients();
+      final patients = await patientRepository.getPatients();
       emit(PatientLoadSuccess(patients: patients, activePatient: _activePatient));
     } catch (e) {
       emit(PatientFailure(e.toString()));
@@ -87,11 +85,11 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientDeleted event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      await _patientRepository.deletePatient(event.localId, event.remoteId);
+      await patientRepository.deletePatient(event.localId, event.remoteId);
       if (_activePatient?.id == event.localId) {
         _activePatient = null;
       }
-      final patients = await _patientRepository.getPatients();
+      final patients = await patientRepository.getPatients();
       if (_activePatient == null && patients.isNotEmpty) {
         _activePatient = patients.first;
       }
