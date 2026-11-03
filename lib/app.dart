@@ -12,6 +12,10 @@ import 'features/settings/presentation/bloc/settings_bloc.dart';
 import 'features/settings/presentation/bloc/settings_state.dart';
 import 'features/vitals/presentation/bloc/vitals_bloc.dart';
 import 'features/reminders/presentation/bloc/reminders_bloc.dart';
+import 'features/ai_model_test/presentation/bloc/model_eval_bloc.dart';
+
+import 'features/activity/presentation/bloc/activity_bloc.dart';
+import 'features/activity/presentation/bloc/activity_event.dart';
 
 class VitalApp extends StatelessWidget {
   const VitalApp({super.key});
@@ -34,6 +38,12 @@ class VitalApp extends StatelessWidget {
         BlocProvider<RemindersBloc>(
           create: (context) => locator<RemindersBloc>(),
         ),
+        BlocProvider<ModelEvalBloc>(
+          create: (context) => locator<ModelEvalBloc>(),
+        ),
+        BlocProvider<ActivityBloc>(
+          create: (context) => locator<ActivityBloc>()..add(const ActivityListRequested()),
+        ),
       ],
       child: BlocBuilder<SettingsBloc, SettingsState>(
         builder: (context, settings) {
@@ -45,7 +55,7 @@ class VitalApp extends StatelessWidget {
               : AppTheme.darkTheme;
 
           return MaterialApp.router(
-            title: 'VitalAI Health',
+            title: 'VoiceVitals',
             theme: lightTheme,
             darkTheme: darkTheme,
             themeMode: settings.themeMode,

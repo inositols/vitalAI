@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:vitalai/features/dashboard/presentation/pages/dashboard_page.dart';
-import 'package:vitalai/features/ai_assistant/presentation/pages/ai_chat_page.dart';
+import 'package:vitalai/features/assistant/presentation/pages/assistant_page.dart';
+import 'package:vitalai/features/patients/presentation/pages/patients_page.dart';
+import 'package:vitalai/features/activity/presentation/pages/activity_page.dart';
+import 'package:vitalai/features/vitals/presentation/pages/confirm_vital_page.dart';
 import 'package:vitalai/features/vitals/presentation/pages/charts_page.dart';
 import 'package:vitalai/features/vitals/presentation/pages/history_page.dart';
 import 'package:vitalai/features/settings/presentation/pages/settings_page.dart';
 import 'package:vitalai/features/vitals/presentation/pages/add_vital_page.dart';
-import 'package:vitalai/features/patients/presentation/pages/patients_page.dart';
 import 'package:vitalai/features/caregiver/presentation/pages/caregiver_page.dart';
 import 'package:vitalai/features/auth/presentation/pages/login_page.dart';
 import 'package:vitalai/features/onboarding/presentation/pages/splash_page.dart';
 import 'package:vitalai/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:vitalai/core/theme/design_tokens.dart';
 import 'package:vitalai/features/reminders/presentation/pages/reminders_page.dart';
+import 'package:vitalai/features/ai_assistant/presentation/pages/ai_chat_page.dart';
+import 'package:vitalai/features/ai_model_test/presentation/pages/ai_model_test_page.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'root',
@@ -40,29 +43,56 @@ final GoRouter appRouter = GoRouter(
       path: '/add-vital',
       builder: (context, state) => const AddVitalPage(),
     ),
+    GoRoute(
+      path: '/confirm-vital',
+      builder: (context, state) => const ConfirmVitalPage(),
+    ),
+    GoRoute(
+      path: '/ai-model-test',
+      builder: (context, state) => const AiModelTestPage(),
+    ),
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) {
         return MainShellScaffold(child: child);
       },
       routes: [
+        // 1. Assistant (Home)
         GoRoute(
           path: '/',
           pageBuilder: (context, state) => const NoTransitionPage(
-            child: DashboardPage(),
+            child: AssistantPage(),
           ),
         ),
+        GoRoute(
+          path: '/assistant',
+          redirect: (context, state) => '/',
+        ),
+        // 2. Patients
         GoRoute(
           path: '/patients',
           pageBuilder: (context, state) => const NoTransitionPage(
             child: PatientsPage(),
           ),
         ),
+        // 3. Activity
+        GoRoute(
+          path: '/activity',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: ActivityPage(),
+          ),
+        ),
+
+        // Preserved Sub-routes for deep navigation and backwards compatibility
         GoRoute(
           path: '/charts',
           pageBuilder: (context, state) => const NoTransitionPage(
             child: ChartsPage(),
           ),
+        ),
+        GoRoute(
+          path: '/vitals',
+          redirect: (context, state) => '/charts',
         ),
         GoRoute(
           path: '/ai-chat',
@@ -112,49 +142,39 @@ class MainShellScaffold extends StatelessWidget {
     final String currentLoc = GoRouterState.of(context).uri.path;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // 3 Primary Destinations matching VoiceVitals specifications
     final destinations = const [
       NavigationDestination(
-        icon: Icon(Icons.grid_view_rounded),
-        selectedIcon: Icon(Icons.grid_view_rounded, color: AppColors.primary),
-        label: 'Home',
+        icon: Icon(Icons.mic_none_rounded),
+        selectedIcon: Icon(Icons.mic_rounded, color: AppColors.primary),
+        label: 'Assistant',
       ),
       NavigationDestination(
-        icon: Icon(Icons.people_outline_rounded),
-        selectedIcon: Icon(Icons.people_rounded, color: AppColors.primary),
+        icon: Icon(Icons.person_outline_rounded),
+        selectedIcon: Icon(Icons.person_rounded, color: AppColors.primary),
         label: 'Patients',
       ),
       NavigationDestination(
-        icon: Icon(Icons.show_chart_rounded),
-        selectedIcon: Icon(Icons.show_chart_rounded, color: AppColors.primary),
-        label: 'Vitals',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.auto_awesome_rounded),
-        selectedIcon: Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
-        label: 'AI Chat',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
-        label: 'Settings',
+        icon: Icon(Icons.schedule_rounded),
+        selectedIcon: Icon(Icons.schedule_rounded, color: AppColors.primary),
+        label: 'Activity',
       ),
     ];
 
     int getSelectedIndex() {
       switch (currentLoc) {
         case '/':
+        case '/assistant':
+        case '/ai-chat':
           return 0;
         case '/patients':
         case '/caregiver':
           return 1;
-        case '/charts':
+        case '/activity':
         case '/history':
+        case '/charts':
         case '/reminders':
           return 2;
-        case '/ai-chat':
-          return 3;
-        case '/settings':
-          return 4;
         default:
           return 0;
       }
@@ -169,13 +189,7 @@ class MainShellScaffold extends StatelessWidget {
           context.go('/patients');
           break;
         case 2:
-          context.go('/charts');
-          break;
-        case 3:
-          context.go('/ai-chat');
-          break;
-        case 4:
-          context.go('/settings');
+          context.go('/activity');
           break;
       }
     }
@@ -197,7 +211,7 @@ class MainShellScaffold extends StatelessWidget {
             color: isDark ? AppColors.darkSurface : Colors.white,
             border: Border(
               top: BorderSide(
-                color: isDark ? AppColors.darkBorder : const Color(0xFFF1F5F9),
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
                 width: 1,
               ),
             ),

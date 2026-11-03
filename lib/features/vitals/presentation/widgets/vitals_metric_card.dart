@@ -208,9 +208,9 @@ class VitalsMetricCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            Text(value, style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface)),
+                            Text(value, style: AppTypography.vitalValueMedium(color: theme.colorScheme.onSurface)),
                             const SizedBox(width: 4),
-                            Text(unit, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8), fontWeight: FontWeight.bold)),
+                            Text(unit, style: AppTypography.vitalUnit(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8))),
                           ],
                         ),
                         const SizedBox(height: 8),

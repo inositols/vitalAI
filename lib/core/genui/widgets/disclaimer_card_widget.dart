@@ -14,6 +14,7 @@ class DisclaimerCardWidget extends StatelessWidget {
         'Educational purpose only. VitalAI recommendations do not replace clinical advice from a qualified healthcare professional.';
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(top: 8, bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(

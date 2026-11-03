@@ -50,13 +50,13 @@ class ReminderRepositoryImpl implements ReminderRepository {
 
   @override
   Future<List<ReminderModel>> getReminders(int patientId) async {
-    final existing = await dbService.getReminders(patientId);
-    if (existing.isEmpty) {
+    if (!dbService.hasRemindersInitialized(patientId)) {
       final defaults = _getDefaultReminders(patientId);
       await dbService.saveReminders(patientId, defaults);
       _syncNotifications(defaults);
       return defaults;
     }
+    final existing = await dbService.getReminders(patientId);
     _syncNotifications(existing);
     return existing;
   }

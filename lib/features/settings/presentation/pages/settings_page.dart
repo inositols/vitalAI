@@ -9,7 +9,10 @@ import '../../../../core/widgets/app_top_bar.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
+import '../../../patients/presentation/bloc/patient_event.dart';
 import '../../../patients/presentation/bloc/patient_state.dart';
+import '../../../patients/presentation/widgets/patient_form_modal.dart';
+import '../../../patients/data/models/patient_model.dart';
 import '../bloc/settings_bloc.dart';
 import '../bloc/settings_event.dart';
 import '../bloc/settings_state.dart';
@@ -23,6 +26,20 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  void _openEditProfile(BuildContext context, PatientModel? patient) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => PatientFormModal(
+        patient: patient,
+        onSave: (savedPatient) {
+          context.read<PatientBloc>().add(PatientSaved(savedPatient));
+        },
+      ),
+    );
+  }
+
   void _openApiKeyDialog(BuildContext context, String currentKey) {
     showDialog(
       context: context,
@@ -155,20 +172,28 @@ class _SettingsPageState extends State<SettingsPage> {
         return BlocBuilder<PatientBloc, PatientState>(
           builder: (context, patientState) {
             final activePatient = patientState is PatientLoadSuccess ? patientState.activePatient : null;
-            final patientName = activePatient?.name ?? 'Alex Thorne';
+            final patientName = (activePatient != null && activePatient.name.trim().isNotEmpty)
+                ? activePatient.name.trim()
+                : 'User';
             final age = activePatient != null
-                ? (DateTime.now().year - activePatient.dateOfBirth.year)
-                : 32;
-            final bloodType = (activePatient?.notes != null && activePatient!.notes!.isNotEmpty)
-                ? activePatient.notes!
-                : 'O+';
-            final heightStr = activePatient != null ? '${activePatient.height.toInt()} cm' : '182 cm';
+                ? '${DateTime.now().year - activePatient.dateOfBirth.year}'
+                : 'Not set';
+            final bloodType = (activePatient != null && activePatient.notes != null && activePatient.notes!.trim().isNotEmpty)
+                ? activePatient.notes!.trim()
+                : 'Not set';
+            final heightStr = (activePatient != null && activePatient.height > 0)
+                ? '${activePatient.height.toInt()} cm'
+                : 'Not set';
+            final idStr = activePatient != null ? '#${activePatient.id.toString().padLeft(4, '0')}' : '#0001';
             final conditions = (activePatient != null && activePatient.medicalConditions.isNotEmpty)
                 ? activePatient.medicalConditions.join(', ')
-                : 'Hypertension';
+                : 'None listed';
             final allergies = (activePatient != null && activePatient.allergies.isNotEmpty)
                 ? activePatient.allergies.join(', ')
-                : 'Penicillin (Severe)';
+                : 'None listed';
+            final medSubtitle = (activePatient != null && activePatient.medications.isNotEmpty)
+                ? '${activePatient.medications.length} active prescriptions (${activePatient.medications.join(', ')})'
+                : 'No active prescriptions';
 
             return Scaffold(
               backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
@@ -191,10 +216,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       _buildHeroProfileCard(
                         context,
                         name: patientName,
-                        id: '#9842-AX',
-                        age: '$age',
+                        id: idStr,
+                        age: age,
                         bloodType: bloodType,
                         height: heightStr,
+                        onTapEdit: () => _openEditProfile(context, activePatient),
                       ),
                       const SizedBox(height: 24),
 
@@ -216,11 +242,21 @@ class _SettingsPageState extends State<SettingsPage> {
                           _buildDivider(isDark),
                           _buildProfileRow(
                             context,
+                            icon: Icons.health_and_safety_outlined,
+                            iconBg: const Color(0xFFF0FDF4),
+                            iconColor: const Color(0xFF16A34A),
+                            title: 'Conditions',
+                            subtitle: conditions,
+                            onTap: () => _openEditProfile(context, activePatient),
+                          ),
+                          _buildDivider(isDark),
+                          _buildProfileRow(
+                            context,
                             icon: Icons.medication_outlined,
                             iconBg: const Color(0xFFEEF2FF),
                             iconColor: const Color(0xFF6366F1),
                             title: 'Medications',
-                            subtitle: '2 Active prescriptions ($conditions)',
+                            subtitle: medSubtitle,
                             onTap: () => context.push('/reminders'),
                           ),
                           _buildDivider(isDark),
@@ -231,7 +267,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             iconColor: const Color(0xFFEF4444),
                             title: 'Allergies',
                             subtitle: allergies,
-                            onTap: () {},
+                            onTap: () => _openEditProfile(context, activePatient),
                           ),
                         ],
                       ),
@@ -261,6 +297,16 @@ class _SettingsPageState extends State<SettingsPage> {
                             title: 'Gemini AI API Key',
                             subtitle: settingsState.apiKey.isNotEmpty ? '✓ Live Gemini AI Connected' : 'Configure API Key',
                             onTap: () => _openApiKeyDialog(context, settingsState.apiKey),
+                          ),
+                          _buildDivider(isDark),
+                          _buildProfileRow(
+                            context,
+                            icon: Icons.biotech_rounded,
+                            iconBg: const Color(0xFFE0F2FE),
+                            iconColor: const Color(0xFF0284C7),
+                            title: 'AI Model Benchmark',
+                            subtitle: 'River AI (GLM-5.3-Flash) vs Gemini',
+                            onTap: () => context.push('/ai-model-test'),
                           ),
                           _buildDivider(isDark),
                           _buildProfileRow(
@@ -358,6 +404,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required String age,
     required String bloodType,
     required String height,
+    VoidCallback? onTapEdit,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -389,7 +436,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     radius: 32,
                     backgroundColor: const Color(0xFFEBF5FF),
                     child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : 'A',
+                      name.isNotEmpty ? name[0].toUpperCase() : 'U',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
@@ -448,6 +495,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
+              if (onTapEdit != null)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF0062E0)),
+                  tooltip: 'Edit Profile',
+                  onPressed: onTapEdit,
+                ),
             ],
           ),
           const SizedBox(height: 20),

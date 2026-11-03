@@ -42,6 +42,72 @@ Keep tracking daily.
       expect(cleanText, isNot(contains('```json')));
     });
 
+    test('GenUiParser parses <gen_ui> XML tags and cleanly strips tags from cleanText', () {
+      const input = '''
+Here is your blood pressure analysis:
+
+<gen_ui>
+{
+  "type": "blood_pressure_card",
+  "title": "Blood Pressure",
+  "value": "118/76",
+  "unit": "mmHg",
+  "status": "normal"
+}
+</gen_ui>
+
+Please continue monitoring.
+''';
+
+      final components = GenUiParser.parseComponents(input);
+      expect(components.length, 1);
+      expect(components.first, isA<GenUiMetricSummaryModel>());
+
+      final cleanText = GenUiParser.cleanText(input);
+      expect(cleanText, contains('Here is your blood pressure analysis:'));
+      expect(cleanText, contains('Please continue monitoring.'));
+      expect(cleanText, isNot(contains('<gen_ui>')));
+      expect(cleanText, isNot(contains('</gen_ui>')));
+      expect(cleanText, isNot(contains('blood_pressure_card')));
+    });
+
+    test('GenUiParser strips orphan/stray <gen_ui> tags from output', () {
+      const stray = 'Your vitals look normal. <gen_ui> Stay well! <gen-ui> <ui> All good </ui> </gen_ui>';
+      final clean = GenUiParser.cleanText(stray);
+      expect(clean, isNot(contains('<gen_ui>')));
+      expect(clean, isNot(contains('<gen-ui>')));
+      expect(clean, isNot(contains('<ui>')));
+      expect(clean, isNot(contains('</ui>')));
+      expect(clean, isNot(contains('</gen_ui>')));
+      expect(clean, contains('Your vitals look normal.'));
+      expect(clean, contains('Stay well!'));
+    });
+
+    test('GenUiParser handles <gen_ui type="card"> with attributes or hyphens', () {
+      const input = '''
+Clinical note:
+<gen-ui type="blood_pressure">
+{
+  "type": "blood_pressure_card",
+  "title": "Blood Pressure",
+  "value": "125/82",
+  "unit": "mmHg",
+  "status": "normal"
+}
+</gen-ui>
+Everything is in order.
+''';
+      final components = GenUiParser.parseComponents(input);
+      expect(components.length, 1);
+      expect(components.first, isA<GenUiMetricSummaryModel>());
+
+      final cleanText = GenUiParser.cleanText(input);
+      expect(cleanText, isNot(contains('<gen-ui')));
+      expect(cleanText, isNot(contains('</gen-ui>')));
+      expect(cleanText, contains('Clinical note:'));
+      expect(cleanText, contains('Everything is in order.'));
+    });
+
     test('GenUiIntentModel classifies user prompts accurately', () {
       final summaryIntent = GenUiIntentModel.fromQuery("Show me today's health summary.");
       expect(summaryIntent.intentType, GenUiIntentType.healthSummary);
@@ -70,6 +136,102 @@ Keep tracking daily.
       expect(prompt, contains('blood_pressure_card'));
       expect(prompt, contains('report_card'));
       expect(prompt, contains('recommendation_card'));
+      expect(prompt, contains('medication_intake_card'));
+      expect(prompt, contains('lab_results_card'));
+      expect(prompt, contains('risk_gauge_card'));
+      expect(prompt, contains('doctor_checklist_card'));
+    });
+
+    test('GenUiParser parses medication_intake_card, lab_results_card, risk_gauge_card, and doctor_checklist_card', () {
+      const input = '''
+Clinical recommendations for your review:
+
+```json
+{
+  "type": "medication_intake_card",
+  "medicationName": "Lisinopril",
+  "dosage": "10 mg",
+  "scheduledTime": "08:00 AM",
+  "instructions": "Take once daily in morning with water."
+}
+```
+
+```json
+{
+  "type": "lab_results_card",
+  "panelName": "Lipid Panel",
+  "collectionDate": "Oct 1, 2026",
+  "analytes": [
+    {
+      "name": "Total Cholesterol",
+      "value": "195",
+      "unit": "mg/dL",
+      "referenceRange": "< 200 mg/dL",
+      "status": "normal"
+    },
+    {
+      "name": "LDL",
+      "value": "128",
+      "unit": "mg/dL",
+      "referenceRange": "< 100 mg/dL",
+      "status": "elevated"
+    }
+  ]
+}
+```
+
+```json
+{
+  "type": "risk_gauge_card",
+  "title": "Cardiovascular Risk Score",
+  "scorePercentage": 12.4,
+  "riskLevel": "moderate",
+  "categoryDescription": "10-Year ASCVD Risk Estimate",
+  "contributingFactors": ["Systolic BP 134 mmHg", "Age 54"],
+  "recommendation": "Maintain aerobic exercise and low-sodium diet."
+}
+```
+
+```json
+{
+  "type": "doctor_checklist_card",
+  "title": "Doctor Visit Discussion Guide",
+  "appointmentFocus": "Hypertension & medication checkup",
+  "checklistItems": [
+    {
+      "question": "Should my lisinopril dosage be adjusted?"
+    },
+    {
+      "question": "How often should I monitor BP at home?"
+    }
+  ]
+}
+```
+''';
+
+      final components = GenUiParser.parseComponents(input);
+      expect(components.length, 4);
+
+      expect(components[0], isA<GenUiMedicationIntakeModel>());
+      final med = components[0] as GenUiMedicationIntakeModel;
+      expect(med.medicationName, 'Lisinopril');
+      expect(med.dosage, '10 mg');
+
+      expect(components[1], isA<GenUiLabResultsModel>());
+      final lab = components[1] as GenUiLabResultsModel;
+      expect(lab.panelName, 'Lipid Panel');
+      expect(lab.analytes.length, 2);
+      expect(lab.analytes[0].name, 'Total Cholesterol');
+
+      expect(components[2], isA<GenUiRiskGaugeModel>());
+      final risk = components[2] as GenUiRiskGaugeModel;
+      expect(risk.riskLevel, 'moderate');
+      expect(risk.scorePercentage, 12.4);
+
+      expect(components[3], isA<GenUiDoctorChecklistModel>());
+      final doc = components[3] as GenUiDoctorChecklistModel;
+      expect(doc.checklistItems.length, 2);
+      expect(doc.checklistItems[0].question, 'Should my lisinopril dosage be adjusted?');
     });
 
     test('GenUiCacheService caches and retrieves response payloads', () async {
@@ -86,3 +248,4 @@ Keep tracking daily.
     });
   });
 }
+

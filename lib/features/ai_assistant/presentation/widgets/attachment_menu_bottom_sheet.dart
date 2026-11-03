@@ -20,30 +20,42 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
 
     final bpSys = healthContext?.bpSystolicTrend.average?.round();
     final bpDia = healthContext?.bpDiastolicTrend.average?.round();
-    final bpSummary = (healthContext != null && healthContext!.hasBpData && bpSys != null && bpDia != null)
+    final hasBp = healthContext != null && healthContext!.hasBpData && bpSys != null && bpDia != null;
+    final bpSummary = hasBp
         ? 'Avg $bpSys/$bpDia mmHg (${healthContext!.bpSystolicTrend.direction})'
-        : 'Latest: 124/82 mmHg (Normal)';
+        : 'No blood pressure logs recorded yet';
 
     final glucoseAvg = healthContext?.glucoseTrend.average?.round();
-    final glucoseSummary = (healthContext != null && healthContext!.hasGlucoseData && glucoseAvg != null)
+    final hasGlucose = healthContext != null && healthContext!.hasGlucoseData && glucoseAvg != null;
+    final glucoseSummary = hasGlucose
         ? 'Avg $glucoseAvg mg/dL (${healthContext!.glucoseTrend.direction})'
-        : 'Latest: 98 mg/dL fasting';
+        : 'No glucose logs recorded yet';
 
-    final rxSummary = healthContext != null && healthContext!.hasMedications
-        ? healthContext!.medications.take(2).join(', ')
-        : 'Lisinopril 10mg daily';
+    final hasRx = healthContext != null && healthContext!.hasMedications;
+    final rxSummary = hasRx
+        ? healthContext!.medications.take(3).join(', ')
+        : 'No active medications registered';
 
-    final pulseAvg = healthContext?.pulseTrend.average?.round() ?? 72;
-    final spo2Avg = healthContext?.spo2Trend.average?.round() ?? 98;
-    final pulseSpo2Summary = 'Pulse: $pulseAvg bpm • SpO₂: $spo2Avg%';
+    final pulseAvg = healthContext?.pulseTrend.average?.round();
+    final spo2Avg = healthContext?.spo2Trend.average?.round();
+    final hasPulseSpo2 = pulseAvg != null || spo2Avg != null;
+    final pulseSpo2Summary = hasPulseSpo2
+        ? 'Pulse: ${pulseAvg ?? '--'} bpm • SpO₂: ${spo2Avg != null ? '$spo2Avg%' : '--'}'
+        : 'No pulse or SpO₂ readings logged';
+
+    final totalLogs = healthContext?.totalVitalsCount ?? 0;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -97,7 +109,9 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
                 title: 'Attach Blood Pressure Trend',
                 subtitle: bpSummary,
                 onTap: () => onSelectAttachment(
-                  'Attached BP Log: $bpSummary. Can you evaluate this reading and suggest actionable adjustments?',
+                  hasBp
+                      ? 'Attached BP Log: $bpSummary. Can you evaluate this reading and suggest actionable adjustments?'
+                      : 'I would like advice on tracking and managing my blood pressure.',
                 ),
               ),
 
@@ -109,7 +123,9 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
                 title: 'Attach Blood Glucose Log',
                 subtitle: glucoseSummary,
                 onTap: () => onSelectAttachment(
-                  'Attached Glucose Log: $glucoseSummary. Is this within the ideal fasting/post-meal range?',
+                  hasGlucose
+                      ? 'Attached Glucose Log: $glucoseSummary. Is this within the ideal fasting/post-meal range?'
+                      : 'I would like guidance on healthy blood glucose ranges and monitoring.',
                 ),
               ),
 
@@ -121,7 +137,9 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
                 title: 'Attach Active Prescriptions',
                 subtitle: rxSummary,
                 onTap: () => onSelectAttachment(
-                  'Attached Active Rx: $rxSummary. Are there specific side effects or timing precautions I should know?',
+                  hasRx
+                      ? 'Attached Active Rx: $rxSummary. Are there specific side effects or timing precautions I should know?'
+                      : 'Can you provide general guidelines on safe medication management and schedules?',
                 ),
               ),
 
@@ -133,7 +151,9 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
                 title: 'Attach Pulse & Oxygen Saturation',
                 subtitle: pulseSpo2Summary,
                 onTap: () => onSelectAttachment(
-                  'Attached Vitals: $pulseSpo2Summary. How do these cardiovascular indicators look?',
+                  hasPulseSpo2
+                      ? 'Attached Vitals: $pulseSpo2Summary. How do these cardiovascular indicators look?'
+                      : 'What are normal resting heart rate and oxygen saturation (SpO₂) ranges?',
                 ),
               ),
 
@@ -143,9 +163,11 @@ class AttachmentMenuBottomSheet extends StatelessWidget {
                 icon: Icons.summarize_rounded,
                 color: AppColors.secondary,
                 title: 'Attach Full 30-Day Vitals Summary',
-                subtitle: '${healthContext?.totalVitalsCount ?? 12} total logs analyzed',
+                subtitle: '$totalLogs total logs recorded',
                 onTap: () => onSelectAttachment(
-                  'Attached 30-Day Comprehensive Vitals Summary. Please summarize my overall hemodynamic trajectory and doctor prep checklist.',
+                  totalLogs > 0
+                      ? 'Attached 30-Day Comprehensive Vitals Summary ($totalLogs readings). Please summarize my overall hemodynamic trajectory and doctor prep checklist.'
+                      : 'Help me prepare a checklist of questions and vitals to discuss at my next doctor appointment.',
                 ),
               ),
             ],

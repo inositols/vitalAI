@@ -27,13 +27,7 @@ class _CaregiverPageState extends State<CaregiverPage> {
   bool _notifyOnCritical = true;
 
   final _emailController = TextEditingController();
-  final List<CaregiverModel> _activeCaregivers = [
-    CaregiverModel(
-      id: '1',
-      name: 'Sarah Vance (Care Coordinator)',
-      email: 'sarah.vance@clinic.org',
-    ),
-  ];
+  final List<CaregiverModel> _activeCaregivers = [];
 
   @override
   void dispose() {

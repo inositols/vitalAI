@@ -1,5 +1,7 @@
 import 'package:vitalai/features/patients/domain/repositories/patient_repository.dart';
+import 'package:vitalai/features/patients/data/models/patient_model.dart';
 import 'package:vitalai/features/vitals/domain/repositories/vitals_repository.dart';
+import 'package:vitalai/features/vitals/data/models/vital_record.dart';
 import '../../data/models/health_context.dart';
 
 /// HealthContextService is responsible for gathering patient data,
@@ -20,18 +22,19 @@ class HealthContextService {
     Duration dateWindow = const Duration(days: 30),
   }) async {
     final patients = await patientRepository.getPatients();
-    final patient = patients.firstWhere(
-      (p) => p.id == patientId,
-      orElse: () => patients.isNotEmpty ? patients.first : throw Exception('Patient not found'),
+    final patient = patients.cast<PatientModel?>().firstWhere(
+      (p) => p?.id == patientId,
+      orElse: () => patients.isNotEmpty ? patients.first : null,
     );
 
     final now = DateTime.now();
-    final startDate = now.subtract(dateWindow);
-    final allVitals = await vitalsRepository.getVitals(patientId);
+    final targetPatientId = patient?.id ?? patientId;
+    final allVitals = targetPatientId > 0 ? await vitalsRepository.getVitals(targetPatientId) : <VitalRecord>[];
 
     // Sort vitals chronologically
     allVitals.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
+    final startDate = now.subtract(dateWindow);
     final windowVitals = allVitals
         .where((v) => v.dateTime.isAfter(startDate) || v.dateTime.isAtSameMomentAs(startDate))
         .toList();
@@ -60,21 +63,30 @@ class HealthContextService {
     }
 
     // 3. Compute Age
-    final age = now.year - patient.dateOfBirth.year -
-        ((now.month < patient.dateOfBirth.month ||
-                (now.month == patient.dateOfBirth.month && now.day < patient.dateOfBirth.day))
-            ? 1
-            : 0);
+    final int age;
+    if (patient != null) {
+      age = now.year - patient.dateOfBirth.year -
+          ((now.month < patient.dateOfBirth.month ||
+                  (now.month == patient.dateOfBirth.month && now.day < patient.dateOfBirth.day))
+              ? 1
+              : 0);
+    } else {
+      age = 30;
+    }
+
+    final patientName = (patient != null && patient.name.trim().isNotEmpty)
+        ? patient.name.trim()
+        : 'User';
 
     return HealthContext(
-      patientId: patient.id,
-      patientName: patient.name,
-      gender: patient.gender,
+      patientId: targetPatientId,
+      patientName: patientName,
+      gender: patient?.gender ?? 'Other',
       age: age > 0 ? age : 30,
-      medicalNotes: patient.notes ?? '',
-      conditions: patient.medicalConditions,
-      allergies: patient.allergies,
-      medications: patient.medications,
+      medicalNotes: patient?.notes ?? '',
+      conditions: patient?.medicalConditions ?? [],
+      allergies: patient?.allergies ?? [],
+      medications: patient?.medications ?? [],
       bpSystolicTrend: bpSystolic,
       bpDiastolicTrend: bpDiastolic,
       glucoseTrend: glucose,
@@ -89,9 +101,16 @@ class HealthContextService {
     );
   }
 
-  /// Dynamically generates smart contextual question suggestions.
+  /// Dynamically generates smart contextual question suggestions covering general health and vitals.
   List<String> generateSmartSuggestions(HealthContext context) {
     final suggestions = <String>[];
+
+    // General Health & Wellness exploration
+    suggestions.add('What causes kidney stones and how to prevent them?');
+    suggestions.add('Explain HDL vs LDL cholesterol');
+    suggestions.add('How does intermittent fasting work?');
+    suggestions.add('What are the symptoms of appendicitis?');
+    suggestions.add('How to lower blood pressure naturally?');
 
     if (context.hasVitalsData) {
       suggestions.add('Summarise my health this week');

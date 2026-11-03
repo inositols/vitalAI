@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../../../core/extensions/build_context_ext.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_brand_logo.dart';
-import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../auth/presentation/bloc/auth_state.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -15,7 +10,8 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin {
+class _SplashPageState extends State<SplashPage>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnim;
   late Animation<double> _fadeAnim;
@@ -34,7 +30,7 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     );
     _fadeAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.4, 1.0, curve: Curves.easeIn),
+      curve: const Interval(0.3, 1.0, curve: Curves.easeIn),
     );
 
     _controller.forward();
@@ -48,94 +44,135 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
   }
 
   Future<void> _navigateNext() async {
-    await Future.delayed(const Duration(milliseconds: 2200));
+    await Future.delayed(const Duration(milliseconds: 2000));
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-
-    final bool onboardingDone = prefs.getBool('onboarding_completed') ?? false;
-
-    if (!onboardingDone) {
-      context.go('/onboarding');
-      return;
-    }
-
-    final authState = context.read<AuthBloc>().state;
-    if (authState is AuthAuthenticated) {
-      context.go('/');
-    } else {
-      context.go('/login');
-    }
+    context.go('/');
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : Colors.white,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Spacer(),
-            ScaleTransition(
-              scale: _scaleAnim,
-              child: const AppBrandLogo(
-                size: 104,
-                iconSize: 48,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : const Color(0xFFF8FAFC),
+      body: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 180,
+            child: CustomPaint(
+              painter: _SplashWavePainter(
+                color: isDark
+                    ? AppColors.darkSurface.withValues(alpha: 0.5)
+                    : const Color(0xFFE2F4EE),
               ),
             ),
-            const SizedBox(height: 28),
-            FadeTransition(
-              opacity: _fadeAnim,
-              child: Column(
-                children: [
-                  Text(
-                    'VitalAI Health',
-                    style: context.textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 28,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Intelligent Clinical Monitoring',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            FadeTransition(
-              opacity: _fadeAnim,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 48.0),
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppColors.primary,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(flex: 2),
+                ScaleTransition(
+                  scale: _scaleAnim,
+                  child: const AppBrandLogo(size: 80),
+                ),
+                const SizedBox(height: 24),
+
+                FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Column(
+                    children: [
+                      Text(
+                        'VoiceVitals',
+                        style: AppTypography.displayMedium(
+                          color: isDark ? Colors.white : AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your Voice. Better Care.',
+                        style: AppTypography.titleMedium(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Text(
+                          'The AI voice assistant for healthcare providers.',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodySmall(
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.lightTextSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                const Spacer(flex: 2),
+                FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 32.0),
+                    child: Text(
+                      'Smart. Secure. Clinical.',
+                      style: AppTypography.labelSmall(
+                        color: isDark
+                            ? AppColors.darkTextMuted
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _SplashWavePainter extends CustomPainter {
+  final Color color;
+
+  _SplashWavePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(0, size.height * 0.4);
+    path.quadraticBezierTo(
+      size.width * 0.35,
+      size.height * 0.1,
+      size.width * 0.7,
+      size.height * 0.35,
+    );
+    path.quadraticBezierTo(
+      size.width * 0.88,
+      size.height * 0.5,
+      size.width,
+      size.height * 0.25,
+    );
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

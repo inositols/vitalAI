@@ -14,7 +14,9 @@ class VitalsRepositoryImpl implements VitalsRepository {
   @override
   Future<List<VitalRecord>> getVitals(int patientId) async {
     final list = await _dbService.getVitals();
-    return list.where((v) => v.patientId == patientId).toList();
+    final patientList = list.where((v) => v.patientId == patientId).toList();
+    patientList.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    return patientList;
   }
 
   @override
@@ -61,7 +63,9 @@ class VitalsRepositoryImpl implements VitalsRepository {
       filtered = filtered.where(_isAbnormal);
     }
 
-    return filtered.toList();
+    final result = filtered.toList();
+    result.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    return result;
   }
 
   @override

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../core/services/ai_audio_service.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_top_bar.dart';
 import '../../../patients/presentation/bloc/patient_bloc.dart';
@@ -20,6 +22,7 @@ import '../widgets/chat_typing_indicator.dart';
 import '../widgets/conversation_drawer.dart';
 import '../widgets/smart_suggestions_bar.dart';
 import '../widgets/voice_dictation_modal.dart';
+import '../../../../core/genui/widgets/genui_playground_sheet.dart';
 
 class AiChatPage extends StatefulWidget {
   const AiChatPage({super.key});
@@ -47,6 +50,11 @@ class _AiChatPageState extends State<AiChatPage> {
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    try {
+      if (locator.isRegistered<AiAudioService>()) {
+        locator<AiAudioService>().stop();
+      }
+    } catch (_) {}
     super.dispose();
   }
 
@@ -66,7 +74,7 @@ class _AiChatPageState extends State<AiChatPage> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
-    context.read<AiAssistantBloc>().add(AiAssistantSendMessage(text));
+    context.read<AiAssistantBloc>().add(AiAssistantSendMessage(text, patientId: _activePatientId));
   }
 
   void _replyToMessage(String content) {
@@ -98,6 +106,7 @@ class _AiChatPageState extends State<AiChatPage> {
   void _showAttachmentMenu(BuildContext context, HealthContext? healthContext) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => AttachmentMenuBottomSheet(
         healthContext: healthContext,
@@ -122,65 +131,32 @@ class _AiChatPageState extends State<AiChatPage> {
         child: ConversationDrawer(
           conversations: state.conversations,
           activeConversationId: state.activeConversation.id,
-          onSelectConversation: (id) => context.read<AiAssistantBloc>().add(AiAssistantSelectConversation(id)),
+          onSelectConversation: (id) {
+            try {
+              if (locator.isRegistered<AiAudioService>()) {
+                locator<AiAudioService>().stop();
+              }
+            } catch (_) {}
+            context.read<AiAssistantBloc>().add(AiAssistantSelectConversation(id));
+          },
           onDeleteConversation: (id) => context.read<AiAssistantBloc>().add(AiAssistantDeleteConversation(id)),
-          onNewChat: () => context.read<AiAssistantBloc>().add(const AiAssistantNewChat()),
-          onClearAll: () => context.read<AiAssistantBloc>().add(const AiAssistantClearAll()),
+          onNewChat: () {
+            try {
+              if (locator.isRegistered<AiAudioService>()) {
+                locator<AiAudioService>().stop();
+              }
+            } catch (_) {}
+            context.read<AiAssistantBloc>().add(const AiAssistantNewChat());
+          },
+          onClearAll: () {
+            try {
+              if (locator.isRegistered<AiAudioService>()) {
+                locator<AiAudioService>().stop();
+              }
+            } catch (_) {}
+            context.read<AiAssistantBloc>().add(const AiAssistantClearAll());
+          },
         ),
-      ),
-    );
-  }
-
-  void _openApiKeyDialog(BuildContext context, String currentKey) {
-    final textController = TextEditingController(text: currentKey);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.key_rounded, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Gemini API Key', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter your Google Gemini API key to enable live AI responses from Gemini 1.5 Flash.',
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: textController,
-              decoration: const InputDecoration(
-                labelText: 'API Key (AIzaSy...)',
-                hintText: 'Paste your Gemini API key here',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newKey = textController.text.trim();
-              context.read<SettingsBloc>().add(ApiKeyUpdated(newKey));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('✓ Gemini API Key updated successfully! Live AI active.')),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-            child: const Text('Save Key'),
-          ),
-        ],
       ),
     );
   }
@@ -194,15 +170,24 @@ class _AiChatPageState extends State<AiChatPage> {
         return BlocBuilder<PatientBloc, PatientState>(
           builder: (context, patientState) {
             final activePatient = patientState is PatientLoadSuccess ? patientState.activePatient : null;
+            final targetPatientId = activePatient?.id ?? 0;
+            final patientName = (activePatient != null && activePatient.name.trim().isNotEmpty)
+                ? activePatient.name.trim()
+                : 'User';
 
-            if (activePatient != null && _activePatientId != activePatient.id) {
-              _activePatientId = activePatient.id;
-              context.read<AiAssistantBloc>().add(AiAssistantInit(activePatient.id));
+            final currentAiState = context.read<AiAssistantBloc>().state;
+            if (_activePatientId != targetPatientId || currentAiState is AiAssistantInitial) {
+              _activePatientId = targetPatientId;
+              context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
             }
 
             if (!settings.aiConsent) {
               return AiConsentView(
-                onGrantConsent: () => context.read<SettingsBloc>().add(const AiConsentToggled(true)),
+                onGrantConsent: () {
+                  context.read<SettingsBloc>().add(const AiConsentToggled(true));
+                  _activePatientId = targetPatientId;
+                  context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
+                },
               );
             }
 
@@ -216,7 +201,7 @@ class _AiChatPageState extends State<AiChatPage> {
                     backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
                     appBar: AppTopBar(
                       title: 'VitalAI',
-                      initials: activePatient?.name ?? 'A',
+                      initials: patientName,
                       onAvatarTap: () => context.go('/settings'),
                     ),
                     body: const Center(child: CircularProgressIndicator()),
@@ -228,7 +213,7 @@ class _AiChatPageState extends State<AiChatPage> {
                     backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF8FAFC),
                     appBar: AppTopBar(
                       title: 'VitalAI',
-                      initials: activePatient?.name ?? 'A',
+                      initials: patientName,
                       onAvatarTap: () => context.go('/settings'),
                     ),
                     body: Center(
@@ -256,9 +241,7 @@ class _AiChatPageState extends State<AiChatPage> {
                               icon: const Icon(Icons.refresh_rounded),
                               label: const Text('Retry Connection'),
                               onPressed: () {
-                                if (_activePatientId != null) {
-                                  context.read<AiAssistantBloc>().add(AiAssistantInit(_activePatientId!));
-                                }
+                                context.read<AiAssistantBloc>().add(AiAssistantInit(targetPatientId));
                               },
                             ),
                           ],
@@ -275,20 +258,46 @@ class _AiChatPageState extends State<AiChatPage> {
                   backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFE8ECEF),
                   appBar: AppTopBar(
                     title: 'VitalAI',
-                    initials: activePatient?.name ?? 'A',
+                    initials: patientName,
                     onAvatarTap: () => context.go('/settings'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (locator.isRegistered<AiAudioService>())
+                          StreamBuilder<AudioPlaybackState>(
+                            stream: locator<AiAudioService>().stateStream,
+                            initialData: locator<AiAudioService>().currentState,
+                            builder: (context, snapshot) {
+                              final audio = snapshot.data;
+                              if (audio != null && audio.isActive) {
+                                return IconButton(
+                                  icon: Icon(
+                                    audio.isPlaying ? Icons.volume_up_rounded : Icons.pause_circle_rounded,
+                                    color: audio.isPlaying ? AppColors.tertiary : const Color(0xFF64748B),
+                                    size: 22,
+                                  ),
+                                  tooltip: audio.isPlaying ? 'Stop voice playback' : 'Resume voice playback',
+                                  onPressed: () {
+                                    if (audio.isPlaying) {
+                                      locator<AiAudioService>().stop();
+                                    } else {
+                                      locator<AiAudioService>().resume();
+                                    }
+                                  },
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.science_outlined, color: Color(0xFF64748B)),
+                          tooltip: 'GenUI Sandbox & Inspector',
+                          onPressed: () => GenUiPlaygroundSheet.show(context),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.history_rounded, color: Color(0xFF64748B)),
                           tooltip: 'Chat Sessions',
                           onPressed: () => _openConversationHistory(context, loadedState),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.key_rounded, color: Color(0xFF64748B)),
-                          tooltip: 'Gemini API Key',
-                          onPressed: () => _openApiKeyDialog(context, settings.apiKey),
                         ),
                       ],
                     ),
@@ -299,7 +308,7 @@ class _AiChatPageState extends State<AiChatPage> {
                         Expanded(
                           child: ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             itemCount: messages.length + (loadedState.isGenerating ? 1 : 0),
                             itemBuilder: (ctx, index) {
                               if (index < messages.length) {
@@ -311,7 +320,7 @@ class _AiChatPageState extends State<AiChatPage> {
                                   onRegenerate: () {
                                     if (index > 0) {
                                       final userPrompt = messages[index - 1].content;
-                                      context.read<AiAssistantBloc>().add(AiAssistantSendMessage(userPrompt));
+                                      context.read<AiAssistantBloc>().add(AiAssistantSendMessage(userPrompt, patientId: targetPatientId));
                                     }
                                   },
                                 );
@@ -324,7 +333,7 @@ class _AiChatPageState extends State<AiChatPage> {
                         // 1. Horizontal Scrollable Suggestion Chips
                         SmartSuggestionsBar(
                           suggestions: loadedState.smartSuggestions,
-                          onSelectSuggestion: (query) => context.read<AiAssistantBloc>().add(AiAssistantSendMessage(query)),
+                          onSelectSuggestion: (query) => context.read<AiAssistantBloc>().add(AiAssistantSendMessage(query, patientId: targetPatientId)),
                         ),
                         // 2. Pill Input Bar with (+) and Mic
                         ChatInputBar(

@@ -87,6 +87,48 @@ Keep tracking daily!
       expect(find.text('Hydration Plan'), findsOneWidget);
     });
 
+    testWidgets('Renders components from <gen_ui> tags and hides raw tags from screen', (WidgetTester tester) async {
+      const rawAiResponse = '''
+Your vital statistics have been updated:
+
+<gen_ui>
+{
+  "type": "blood_pressure_card",
+  "title": "Blood Pressure",
+  "value": "122/78",
+  "unit": "mmHg",
+  "status": "normal"
+}
+</gen_ui>
+
+Have a healthy day!
+''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: GenUiRenderer(content: rawAiResponse),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Clean natural text should be rendered
+      expect(find.textContaining('Your vital statistics have been updated:', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Have a healthy day!', findRichText: true), findsOneWidget);
+
+      // Raw tags should NOT be visible on screen
+      expect(find.textContaining('<gen_ui>', findRichText: true), findsNothing);
+      expect(find.textContaining('</gen_ui>', findRichText: true), findsNothing);
+
+      // Component card should be rendered
+      expect(find.byType(BloodPressureCardWidget), findsOneWidget);
+      expect(find.text('122/78'), findsOneWidget);
+    });
+
     testWidgets('Renders ReportCardWidget and TimelineCardWidget correctly', (WidgetTester tester) async {
       const rawResponse = '''
 ```json

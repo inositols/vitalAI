@@ -1,4 +1,5 @@
 import 'package:vitalai/features/patients/data/models/patient_model.dart';
+import 'package:vitalai/features/patients/data/models/clinical_note.dart';
 
 /// Repository interface for patient profiles management.
 abstract class PatientRepository {
@@ -19,4 +20,10 @@ abstract class PatientRepository {
 
   /// Sync local changes to Cloud Firestore when online.
   Future<void> syncPatients();
+
+  /// Retrieve clinical notes for a patient.
+  Future<List<ClinicalNote>> getClinicalNotes(int patientId);
+
+  /// Save clinical note for a patient.
+  Future<void> saveClinicalNote(ClinicalNote note);
 }

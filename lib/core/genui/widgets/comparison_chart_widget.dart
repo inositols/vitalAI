@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/genui_component_model.dart';
 import '../../theme/design_tokens.dart';
@@ -17,6 +18,7 @@ class ComparisonChartWidget extends StatelessWidget {
     final labels = model.labels.isEmpty ? ['Log 1', 'Log 2', 'Log 3'] : model.labels;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -53,6 +55,34 @@ class ComparisonChartWidget extends StatelessWidget {
             height: 180,
             child: LineChart(
               LineChartData(
+                lineTouchData: LineTouchData(
+                  enabled: true,
+                  handleBuiltInTouches: true,
+                  touchCallback: (event, response) {
+                    if (event is FlTapUpEvent || event is FlPanDownEvent) {
+                      HapticFeedback.selectionClick();
+                    }
+                  },
+                  touchTooltipData: LineTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final isS1 = spot.barIndex == 0;
+                        final name = isS1 ? model.series1Name : model.series2Name;
+                        final color = isS1 ? AppColors.primary : AppColors.tertiary;
+                        final valStr = spot.y.toStringAsFixed(spot.y.truncateToDouble() == spot.y ? 0 : 1);
+                        return LineTooltipItem(
+                          '$name: $valStr',
+                          TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
