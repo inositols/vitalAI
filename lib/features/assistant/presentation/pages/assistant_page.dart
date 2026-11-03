@@ -21,8 +21,16 @@ import '../../../activity/data/models/activity_item.dart';
 import '../../../activity/presentation/bloc/activity_bloc.dart';
 import '../../../activity/presentation/bloc/activity_event.dart';
 import '../../../activity/presentation/bloc/activity_state.dart';
+import 'dart:async';
 import '../widgets/voice_listening_view.dart';
 import '../widgets/clinical_comparison_chart_card.dart';
+import '../../../../core/conversation/bloc/conversation_workflow_bloc.dart';
+import '../../../../core/conversation/bloc/conversation_workflow_event.dart';
+import '../../../../core/conversation/models/conversation_intent.dart';
+import '../../../../core/conversation/models/conversation_workflow_state.dart';
+import '../../../../core/conversation/models/workflow_status.dart';
+import '../../../../core/conversation/widgets/adaptive_genui_follow_up_card.dart';
+import '../../../vitals/data/models/vital_record.dart';
 
 enum AssistantUiState {
   idle,
@@ -54,6 +62,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   final List<Map<String, dynamic>> _messages = [];
   bool _isTtsPlaying = false;
 
+  // Universal Conversational Workflow BLoC
+  late final ConversationWorkflowBloc _workflowBloc;
+  StreamSubscription<ConversationWorkflowState>? _workflowSubscription;
+
   // Conversational patient creation
   final PatientCreationService _patientCreationService = PatientCreationService();
   PatientDraft? _activePatientDraft;
@@ -69,6 +81,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    _workflowBloc = locator<ConversationWorkflowBloc>();
+    _workflowSubscription = _workflowBloc.stream.listen(_handleWorkflowStateChange);
     _initSpeech();
   }
 
@@ -102,6 +116,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   @override
   void dispose() {
     _speech?.stop();
+    _workflowSubscription?.cancel();
+    _workflowBloc.close();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -183,62 +199,214 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   }
 
   void _processTranscript(String prompt) async {
-    if (prompt.trim().isEmpty) return;
+    final trimmed = prompt.trim();
+    if (trimmed.isEmpty) return;
 
-    // 0. If patient creation flow is currently active, route the input to it
+    // 0. If legacy patient draft is currently active, route the input to it
     if (_activePatientDraft != null &&
         _activePatientDraft!.currentStep != PatientCreationStep.completed &&
         _activePatientDraft!.currentStep != PatientCreationStep.cancelled) {
-      _handlePatientCreationStep(prompt);
+      _handlePatientCreationStep(trimmed);
       return;
     }
 
     setState(() {
       _uiState = AssistantUiState.processing;
+      _messages.add({
+        'sender': 'user',
+        'text': trimmed,
+      });
     });
 
-    final intent = ClinicalFunctionRouter.classify(prompt);
+    _scrollToBottom();
 
-    // 1. Patient creation intent
-    if (intent == ClinicalIntent.createPatient) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
-      _startPatientCreationWorkflow(prompt);
-      return;
-    }
-
-    // 2. If intent is recording blood pressure:
-    if (intent == ClinicalIntent.recordBloodPressure) {
-      final extracted = ClinicalFunctionRouter.extractBloodPressure(prompt);
-      final sys = extracted?['systolic'] ?? 118.0;
-      final dia = extracted?['diastolic'] ?? 76.0;
-
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
-
-      setState(() => _uiState = AssistantUiState.idle);
-
-      // Open the Confirmation Screen matching Screen 4 in the concept image!
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ConfirmVitalPage(
-            initialSystolic: sys,
-            initialDiastolic: dia,
-            voiceTranscript: prompt,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // Otherwise, generate conversational GenUI response
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-
-    _addAssistantResponse(prompt, intent);
+    final existingPatients = _getExistingPatients();
+    _workflowBloc.add(ConversationUtteranceSubmitted(
+      trimmed,
+      existingPatients: existingPatients,
+    ));
   }
 
+  void _handleWorkflowStateChange(ConversationWorkflowState state) {
+    if (!mounted) return;
+
+    if (state.status == WorkflowStatus.idle) {
+      setState(() => _uiState = AssistantUiState.idle);
+      return;
+    }
+
+    if (state.status == WorkflowStatus.interpretingRequest ||
+        state.status == WorkflowStatus.executingAction) {
+      setState(() => _uiState = AssistantUiState.processing);
+      return;
+    }
+
+    if (state.status.isInteractive && state.currentQuestion != null) {
+      final question = state.currentQuestion!;
+      final questionText = question.promptText;
+
+      final followUpWidget = AdaptiveGenUiFollowUpCard(
+        question: question,
+        state: state,
+        onAnswer: (val) {
+          final patients = _getExistingPatients();
+          _workflowBloc.add(ConversationOptionSelected(
+            question.targetField,
+            val,
+            existingPatients: patients,
+          ));
+        },
+        onConfirm: () {
+          _workflowBloc.add(const ConversationWorkflowConfirmed());
+        },
+        onCancel: () {
+          _workflowBloc.add(const ConversationWorkflowCancelled());
+        },
+        onSkip: () {
+          final patients = _getExistingPatients();
+          _workflowBloc.add(ConversationOptionSelected(
+            'skip_${question.targetField}',
+            true,
+            existingPatients: patients,
+          ));
+        },
+        onBack: () {
+          _workflowBloc.add(const ConversationStepBackRequested());
+        },
+      );
+
+      setState(() {
+        _updateOrAddAiMessage(questionText, followUpWidget);
+        _uiState = AssistantUiState.responding;
+      });
+
+      _speakText(questionText);
+      _scrollToBottom();
+      return;
+    }
+
+    if (state.status == WorkflowStatus.completed) {
+      String responseText = '';
+      Widget? resultWidget;
+
+      switch (state.intent) {
+        case ConversationIntent.recordVitals:
+          final vitals = state.executionResult as VitalRecord?;
+          final sys = vitals?.systolic?.toInt() ?? (state.parameters['systolic'] as num?)?.toInt() ?? 120;
+          final dia = vitals?.diastolic?.toInt() ?? (state.parameters['diastolic'] as num?)?.toInt() ?? 80;
+          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
+          responseText = "Blood pressure reading ($sys/$dia mmHg) recorded successfully for $name.";
+          resultWidget = _buildGenUiVitalSummary();
+          break;
+
+        case ConversationIntent.createPatient:
+          final p = state.executionResult as PatientModel?;
+          final name = p?.name ?? state.parameters['name'] ?? 'new patient';
+          responseText = "Patient $name has been registered successfully.";
+          resultWidget = _buildGenUiPatientList();
+          break;
+
+        case ConversationIntent.draftClinicalNote:
+          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
+          responseText = "Clinical note has been saved to $name's medical record.";
+          resultWidget = _buildGenUiNoteDraft();
+          break;
+
+        case ConversationIntent.manageAppointments:
+          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
+          responseText = "Follow-up appointment for $name has been scheduled.";
+          break;
+
+        case ConversationIntent.compareVitals:
+          final name = state.activePatient?.name ?? 'Chika Okafor';
+          responseText = "Here's $name's blood pressure trend for the last 7 days, compared to the previous 7 days.";
+          resultWidget = ClinicalComparisonChartCard(
+            patientName: name,
+            latestReading: '118/76 mmHg',
+            latestTimestamp: 'Apr 26, 2025 • 09:41 AM',
+          );
+          break;
+
+        case ConversationIntent.queryPatientHistory:
+          final name = state.activePatient?.name ?? 'Chika Okafor';
+          responseText = "Here is the clinical history summary for $name:";
+          resultWidget = _buildGenUiRecentActivity();
+          break;
+
+        case ConversationIntent.openPatientDetails:
+        case ConversationIntent.findPatient:
+          final name = state.activePatient?.name ?? 'Chika Okafor';
+          responseText = "Opening clinical profile and chart for $name:";
+          resultWidget = _buildGenUiPatientList();
+          break;
+
+        default:
+          responseText = "Operation completed successfully.";
+          break;
+      }
+
+      // Refresh patients list in context
+      try {
+        context.read<PatientBloc>().add(PatientListRequested());
+      } catch (_) {}
+
+      setState(() {
+        _updateOrAddAiMessage(responseText, resultWidget);
+        _uiState = AssistantUiState.responding;
+      });
+
+      _speakText(responseText);
+      _scrollToBottom();
+      return;
+    }
+
+    if (state.status == WorkflowStatus.failed) {
+      final err = state.errorMessage ?? 'An error occurred while executing the request.';
+      setState(() {
+        _updateOrAddAiMessage('Unable to complete request: $err', null);
+        _uiState = AssistantUiState.responding;
+      });
+      _speakText('Unable to complete request: $err');
+      _scrollToBottom();
+      return;
+    }
+
+    if (state.status == WorkflowStatus.cancelled) {
+      setState(() {
+        _updateOrAddAiMessage('Workflow was cancelled.', null);
+        _uiState = AssistantUiState.responding;
+      });
+      _speakText('Workflow cancelled.');
+      _scrollToBottom();
+      return;
+    }
+  }
+
+  void _updateOrAddAiMessage(String text, Widget? widget) {
+    if (_messages.isNotEmpty && _messages.last['sender'] == 'ai' && _messages.last['isWorkflow'] == true) {
+      _messages.last['text'] = text;
+      _messages.last['widget'] = widget;
+    } else {
+      _messages.add({
+        'sender': 'ai',
+        'text': text,
+        'widget': widget,
+        'isWorkflow': true,
+      });
+    }
+  }
+
+  List<PatientModel> _getExistingPatients() {
+    try {
+      final patientBloc = context.read<PatientBloc>();
+      if (patientBloc.state is PatientLoadSuccess) {
+        return (patientBloc.state as PatientLoadSuccess).patients;
+      }
+    } catch (_) {}
+    return <PatientModel>[];
+  }
+
+  // ignore: unused_element
   void _startPatientCreationWorkflow(String prompt) {
     final patientBloc = context.read<PatientBloc>();
     final existingPatients = patientBloc.state is PatientLoadSuccess
@@ -411,6 +579,7 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     });
   }
 
+  // ignore: unused_element
   void _addAssistantResponse(String userPrompt, ClinicalIntent intent) {
     String responseText = '';
     Widget? genUiWidget;

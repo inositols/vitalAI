@@ -30,6 +30,12 @@ import '../../features/activity/domain/repositories/activity_repository.dart';
 import '../../features/activity/data/repositories/activity_repository_impl.dart';
 import '../../features/activity/presentation/bloc/activity_bloc.dart';
 import '../services/clinical_data_seeder.dart';
+import '../conversation/services/intent_resolver.dart';
+import '../conversation/services/workflow_validator.dart';
+import '../conversation/services/follow_up_question_resolver.dart';
+import '../conversation/services/action_executor.dart';
+import '../conversation/services/conversation_orchestrator.dart';
+import '../conversation/bloc/conversation_workflow_bloc.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -165,7 +171,34 @@ Future<void> setupLocator() async {
     () => ActivityBloc(repository: locator<ActivityRepository>()),
   );
 
-  // 13. Initialize Database and Seed Default Clinical Records
+  // 13. Universal Conversational Engine Core
+  locator.registerLazySingleton<IntentResolver>(() => const IntentResolver());
+  locator.registerLazySingleton<WorkflowValidator>(() => const WorkflowValidator());
+  locator.registerLazySingleton<FollowUpQuestionResolver>(() => const FollowUpQuestionResolver());
+  locator.registerLazySingleton<ActionExecutor>(
+    () => ActionExecutor(
+      patientRepository: locator<PatientRepository>(),
+      vitalsRepository: locator<VitalsRepository>(),
+      reminderRepository: locator<ReminderRepository>(),
+      activityRepository: locator<ActivityRepository>(),
+    ),
+  );
+  locator.registerLazySingleton<ConversationOrchestrator>(
+    () => ConversationOrchestrator(
+      intentResolver: locator<IntentResolver>(),
+      validator: locator<WorkflowValidator>(),
+      questionResolver: locator<FollowUpQuestionResolver>(),
+      actionExecutor: locator<ActionExecutor>(),
+    ),
+  );
+  locator.registerFactory(
+    () => ConversationWorkflowBloc(
+      orchestrator: locator<ConversationOrchestrator>(),
+    ),
+  );
+
+  // 14. Initialize Database and Seed Default Clinical Records
   await dbService.init();
   await ClinicalDataSeeder.seedDefaultClinicalData(dbService);
 }
+

@@ -5,6 +5,9 @@ import '../../../auth/domain/repositories/auth_repository.dart';
 import 'patient_event.dart';
 import 'patient_state.dart';
 
+/// Alias for PatientsBloc to support architectural naming conventions.
+typedef PatientsBloc = PatientBloc;
+
 class PatientBloc extends Bloc<PatientEvent, PatientState> {
   final PatientRepository patientRepository;
   final AuthRepository? authRepository;
