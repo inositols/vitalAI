@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vitalai/core/conversation/models/conversation_intent.dart';
+import 'package:vitalai/core/conversation/models/conversation_workflow_state.dart';
+import 'package:vitalai/core/conversation/services/action_executor.dart';
 import 'package:vitalai/core/genui/genui.dart';
+import 'package:vitalai/features/patients/data/models/clinical_note.dart';
 import 'package:vitalai/features/patients/data/models/patient_model.dart';
+import 'package:vitalai/features/patients/domain/repositories/patient_repository.dart';
+import 'package:vitalai/features/reminders/data/models/reminder_model.dart';
+import 'package:vitalai/features/reminders/domain/repositories/reminder_repository.dart';
+import 'package:vitalai/features/vitals/data/models/vital_record.dart';
+import 'package:vitalai/features/vitals/domain/repositories/vitals_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -811,4 +820,86 @@ Please monitor daily.
       expect(confirmed, isTrue);
     });
   });
+
+  group('General Query & ActionExecutor Execution', () {
+    test('ActionExecutor handles ConversationIntent.generalQuery successfully', () async {
+      final samplePatient = PatientModel()
+        ..id = 1
+        ..name = 'Chika Okafor'
+        ..remoteId = 'P1'
+        ..dateOfBirth = DateTime(1995, 1, 1)
+        ..gender = 'Female'
+        ..emergencyContact = '123'
+        ..updatedAt = DateTime.now()
+        ..isSynced = true;
+
+      final fakePatientRepo = _MockPatientRepository([samplePatient]);
+      final fakeVitalsRepo = _MockVitalsRepository();
+      final fakeReminderRepo = _MockReminderRepository();
+
+      final executor = ActionExecutor(
+        patientRepository: fakePatientRepo,
+        vitalsRepository: fakeVitalsRepo,
+        reminderRepository: fakeReminderRepo,
+      );
+
+      // 1. General clinical question
+      final state = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: 'What is normal blood pressure?',
+      );
+
+      final result = await executor.executeWorkflowAction(state);
+      expect(result.isSuccess, isTrue);
+      expect(result.actionType, AppActionType.generalQuery);
+      expect(result.summaryText, contains('120'));
+
+      // 2. Friendly greeting
+      final greetingState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: 'Hello',
+      );
+
+      final greetingResult = await executor.executeWorkflowAction(greetingState);
+      expect(greetingResult.isSuccess, isTrue);
+      expect(greetingResult.actionType, AppActionType.generalQuery);
+      expect(greetingResult.summaryText, contains('VitalAI'));
+
+      // 3. High blood pressure patients query
+      final bpQueryState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: 'Show me my patients with high blood pressure',
+      );
+
+      final bpResult = await executor.executeWorkflowAction(bpQueryState);
+      expect(bpResult.isSuccess, isTrue);
+      expect(bpResult.actionType, AppActionType.generalQuery);
+    });
+  });
+}
+
+class _MockPatientRepository implements PatientRepository {
+  final List<PatientModel> list;
+  _MockPatientRepository([this.list = const []]);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
+  Future<List<PatientModel>> getPatients() async => list;
+  @override
+  Future<PatientModel?> getPatientById(int id) async => list.isEmpty ? null : list.first;
+}
+
+class _MockVitalsRepository implements VitalsRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
+  Future<List<VitalRecord>> getVitals(int patientId) async => [];
+}
+
+class _MockReminderRepository implements ReminderRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

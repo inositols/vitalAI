@@ -469,18 +469,27 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     }
     // 4. Completed Workflow Success
     else if (wf.status == WorkflowStatus.completed) {
-      components.add(GenUiComponent(
-        id: 'success_summary_card',
-        type: GenUiComponentTypes.successCard,
-        data: {
-          'message': 'Clinical workflow completed successfully.',
-          'details': wf.executionResult != null ? 'Result: ${wf.executionResult}' : null,
-        },
-      ));
+      if (wf.intent != ConversationIntent.generalQuery) {
+        components.add(GenUiComponent(
+          id: 'success_summary_card',
+          type: GenUiComponentTypes.successCard,
+          data: {
+            'message': 'Clinical workflow completed successfully.',
+            'details': wf.executionResult != null ? 'Result: ${wf.executionResult}' : null,
+          },
+        ));
+      }
+    }
+
+    final String responseMessage;
+    if (wf.intent == ConversationIntent.generalQuery && wf.executionResult is String) {
+      responseMessage = wf.executionResult as String;
+    } else {
+      responseMessage = wf.currentQuestion?.promptText ?? wf.lastUserUtterance;
     }
 
     return GenUiResponse(
-      message: wf.currentQuestion?.promptText ?? wf.lastUserUtterance,
+      message: responseMessage,
       components: components,
       suggestions: suggestions,
       context: {

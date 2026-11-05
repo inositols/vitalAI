@@ -190,6 +190,7 @@ Future<void> setupLocator() async {
       vitalsRepository: locator<VitalsRepository>(),
       reminderRepository: locator<ReminderRepository>(),
       activityRepository: locator<ActivityRepository>(),
+      aiService: locator.isRegistered<AiService>() ? locator<AiService>() : null,
     ),
   );
   locator.registerLazySingleton<ConversationOrchestrator>(
