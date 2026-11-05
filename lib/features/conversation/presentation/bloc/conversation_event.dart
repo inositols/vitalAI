@@ -38,13 +38,59 @@ class VoiceTranscriptReceived extends ConversationEvent {
   List<Object?> get props => [transcript, existingPatients];
 }
 
-/// User submitted an answer to an active clarification or missing field question.
-class ClarificationAnswerSubmitted extends ConversationEvent {
+/// GenUI interactive action selected by user (chip, card action, suggestion).
+class GenUIActionSelected extends ConversationEvent {
+  final GenUiAction action;
+  final List<PatientModel> existingPatients;
+
+  const GenUIActionSelected(
+    this.action, {
+    this.existingPatients = const [],
+  });
+
+  @override
+  List<Object?> get props => [action, existingPatients];
+}
+
+/// GenUI single-choice option selected by user.
+class GenUIOptionSelected extends ConversationEvent {
+  final GenUiOption option;
+  final String? field;
+  final List<PatientModel> existingPatients;
+
+  const GenUIOptionSelected(
+    this.option, {
+    this.field,
+    this.existingPatients = const [],
+  });
+
+  @override
+  List<Object?> get props => [option, field, existingPatients];
+}
+
+/// GenUI multiple-choice or batch selection submitted by user.
+class GenUISelectionSubmitted extends ConversationEvent {
+  final List<GenUiOption> selections;
+  final String? field;
+  final List<PatientModel> existingPatients;
+
+  const GenUISelectionSubmitted(
+    this.selections, {
+    this.field,
+    this.existingPatients = const [],
+  });
+
+  @override
+  List<Object?> get props => [selections, field, existingPatients];
+}
+
+/// Follow-up question answer submitted (via input field or chip).
+class FollowUpAnswerSubmitted extends ConversationEvent {
   final String field;
   final dynamic answer;
   final List<PatientModel> existingPatients;
 
-  const ClarificationAnswerSubmitted(
+  const FollowUpAnswerSubmitted(
     this.field,
     this.answer, {
     this.existingPatients = const [],
@@ -54,7 +100,10 @@ class ClarificationAnswerSubmitted extends ConversationEvent {
   List<Object?> get props => [field, answer, existingPatients];
 }
 
-/// User selected a discrete option (e.g. chip, radio, patient card) from GenUI.
+/// Legacy alias for ClarificationAnswerSubmitted.
+typedef ClarificationAnswerSubmitted = FollowUpAnswerSubmitted;
+
+/// Legacy alias for FollowUpOptionSelected.
 class FollowUpOptionSelected extends ConversationEvent {
   final String field;
   final dynamic optionValue;

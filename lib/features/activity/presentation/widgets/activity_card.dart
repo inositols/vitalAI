@@ -57,7 +57,7 @@ class ActivityCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      activity.description,
+                      activity.subtitle,
                       style: AppTypography.bodySmall(
                         color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
                       ),

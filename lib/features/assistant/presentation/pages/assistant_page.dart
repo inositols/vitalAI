@@ -31,6 +31,10 @@ import '../../../../core/conversation/models/conversation_workflow_state.dart';
 import '../../../../core/conversation/models/workflow_status.dart';
 import '../../../../core/conversation/widgets/adaptive_genui_follow_up_card.dart';
 import '../../../vitals/data/models/vital_record.dart';
+import '../../../../core/genui/models/genui_action.dart';
+import '../../../../core/genui/models/genui_component.dart';
+import '../../../../core/genui/components/suggestion_card.dart';
+import '../../../../core/genui/services/suggestion_service.dart';
 
 enum AssistantUiState {
   idle,
@@ -350,8 +354,16 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         context.read<PatientBloc>().add(PatientListRequested());
       } catch (_) {}
 
+      final suggestions = locator<SuggestionService>().resolveSuggestions(
+        intent: state.intent.name,
+        workflowStatus: state.status.name,
+        patientId: state.activePatient?.id.toString(),
+        patientName: state.activePatient?.name,
+        hasCompletedAction: true,
+      );
+
       setState(() {
-        _updateOrAddAiMessage(responseText, resultWidget);
+        _updateOrAddAiMessage(responseText, resultWidget, suggestions: suggestions);
         _uiState = AssistantUiState.responding;
       });
 
@@ -382,17 +394,53 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     }
   }
 
-  void _updateOrAddAiMessage(String text, Widget? widget) {
+  void _updateOrAddAiMessage(String text, Widget? widget, {List<GenUiAction>? suggestions}) {
     if (_messages.isNotEmpty && _messages.last['sender'] == 'ai' && _messages.last['isWorkflow'] == true) {
       _messages.last['text'] = text;
       _messages.last['widget'] = widget;
+      _messages.last['suggestions'] = suggestions;
     } else {
       _messages.add({
         'sender': 'ai',
         'text': text,
         'widget': widget,
+        'suggestions': suggestions,
         'isWorkflow': true,
       });
+    }
+  }
+
+  void _handleGenUiAction(GenUiAction action) {
+    switch (action.type) {
+      case GenUiActionType.compareVitals:
+        final name = action.payload['patientName'] ?? 'Chika Okafor';
+        _processTranscript("Compare $name's blood pressure from last week to this week.");
+        break;
+      case GenUiActionType.viewVitalHistory:
+        final name = action.payload['patientName'] ?? 'Chika';
+        _processTranscript("Show $name's vital signs.");
+        break;
+      case GenUiActionType.generateSummary:
+        final name = action.payload['patientName'] ?? 'Chika';
+        _processTranscript("Summarise $name's patient history.");
+        break;
+      case GenUiActionType.recordVitals:
+        final name = action.payload['patientName'] ?? 'Chika';
+        _processTranscript("Record a new blood pressure reading for $name.");
+        break;
+      case GenUiActionType.viewPatient:
+        final name = action.payload['patientName'] ?? 'Chika';
+        _processTranscript("Open $name's latest vitals.");
+        break;
+      case GenUiActionType.confirmSave:
+        _workflowBloc.add(const ConversationWorkflowConfirmed());
+        break;
+      case GenUiActionType.cancelWorkflow:
+        _workflowBloc.add(const ConversationWorkflowCancelled());
+        break;
+      default:
+        _processTranscript(action.label);
+        break;
     }
   }
 
@@ -810,6 +858,21 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                         Padding(
                           padding: const EdgeInsets.only(left: 38),
                           child: widgetComponent,
+                        ),
+                      ],
+                      if (msg['suggestions'] is List<GenUiAction> &&
+                          (msg['suggestions'] as List<GenUiAction>).isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 38),
+                          child: SuggestionCard(
+                            component: const GenUiComponent(
+                              id: 'msg_suggestions',
+                              type: GenUiComponentTypes.suggestionCard,
+                            ),
+                            overrideActions: msg['suggestions'] as List<GenUiAction>,
+                            onActionSelected: _handleGenUiAction,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),

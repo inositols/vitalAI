@@ -1,6 +1,6 @@
-import '../../patients/data/models/clinical_note.dart';
+import 'package:vitalai/features/patients/data/models/clinical_note.dart';
 
-export '../../patients/data/models/clinical_note.dart';
+export 'package:vitalai/features/patients/data/models/clinical_note.dart';
 
 abstract class ClinicalNotesRepository {
   Future<List<ClinicalNote>> getNotes(int patientId);

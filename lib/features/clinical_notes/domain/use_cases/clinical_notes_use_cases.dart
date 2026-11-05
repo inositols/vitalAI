@@ -1,4 +1,3 @@
-import '../../patients/data/models/clinical_note.dart';
 import '../repositories/clinical_notes_repository.dart';
 
 class GetClinicalNotesUseCase {

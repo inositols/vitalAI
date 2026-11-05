@@ -1,5 +1,4 @@
-import '../../patients/domain/repositories/patient_repository.dart';
-import '../../patients/data/models/clinical_note.dart';
+import 'package:vitalai/features/patients/domain/repositories/patient_repository.dart';
 import '../../domain/repositories/clinical_notes_repository.dart';
 
 class ClinicalNotesRepositoryImpl implements ClinicalNotesRepository {

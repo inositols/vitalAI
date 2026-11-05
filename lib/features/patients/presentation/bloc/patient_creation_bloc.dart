@@ -117,14 +117,16 @@ class PatientCreationBloc extends Bloc<PatientCreationEvent, PatientCreationStat
     try {
       final newPatient = PatientModel()
         ..name = state.name.trim()
-        ..dateOfBirth = state.dob
+        ..dateOfBirth = state.dob ?? DateTime(1990, 1, 1)
         ..gender = state.gender
-        ..phoneNumber = state.phoneNumber
+        ..phone = state.phoneNumber
         ..emergencyContact = state.emergencyContact
         ..medicalConditions = List<String>.from(state.conditions)
         ..allergies = List<String>.from(state.allergies)
         ..medications = List<String>.from(state.medications)
-        ..createdAt = DateTime.now()
+        ..height = 170.0
+        ..weight = 70.0
+        ..isSynced = false
         ..updatedAt = DateTime.now();
 
       await registerPatientUseCase(newPatient);
