@@ -48,7 +48,7 @@ class _ChartCardState extends State<ChartCard> {
         border: Border.all(color: AppColors.lightBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -220,8 +220,8 @@ class _ChartCardState extends State<ChartCard> {
       avatar: Icon(icon, size: 14, color: AppColors.primary),
       label: Text(label),
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
-      backgroundColor: AppColors.primaryContainer.withOpacity(0.4),
-      side: BorderSide(color: AppColors.primary.withOpacity(0.2)),
+      backgroundColor: AppColors.primaryContainer.withValues(alpha: 0.4),
+      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.2)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onPressed: () {
         widget.onActionSelected?.call(GenUiAction(

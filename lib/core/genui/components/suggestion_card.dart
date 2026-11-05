@@ -33,7 +33,7 @@ class SuggestionCard extends StatelessWidget {
         border: Border.all(color: AppColors.lightBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -85,15 +85,15 @@ class SuggestionCard extends StatelessWidget {
       child: InkWell(
         onTap: () => onActionSelected?.call(action),
         borderRadius: BorderRadius.circular(20),
-        splashColor: AppColors.primary.withOpacity(0.12),
-        highlightColor: AppColors.primary.withOpacity(0.06),
+        splashColor: AppColors.primary.withValues(alpha: 0.12),
+        highlightColor: AppColors.primary.withValues(alpha: 0.06),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.primaryContainer.withOpacity(0.5),
+            color: AppColors.primaryContainer.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: AppColors.primary.withOpacity(0.25),
+              color: AppColors.primary.withValues(alpha: 0.25),
               width: 1,
             ),
           ),

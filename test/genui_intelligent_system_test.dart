@@ -4,10 +4,9 @@ import 'package:vitalai/core/conversation/models/conversation_intent.dart';
 import 'package:vitalai/core/conversation/models/conversation_workflow_state.dart';
 import 'package:vitalai/core/conversation/services/action_executor.dart';
 import 'package:vitalai/core/genui/genui.dart';
-import 'package:vitalai/features/patients/data/models/clinical_note.dart';
+import 'package:vitalai/core/services/ai_service.dart';
 import 'package:vitalai/features/patients/data/models/patient_model.dart';
 import 'package:vitalai/features/patients/domain/repositories/patient_repository.dart';
-import 'package:vitalai/features/reminders/data/models/reminder_model.dart';
 import 'package:vitalai/features/reminders/domain/repositories/reminder_repository.dart';
 import 'package:vitalai/features/vitals/data/models/vital_record.dart';
 import 'package:vitalai/features/vitals/domain/repositories/vitals_repository.dart';
@@ -17,25 +16,6 @@ void main() {
 
   group('Intelligent GenUI System - 6 Conversational Scenarios', () {
     const engine = GenUiEngine();
-    const selectionService = ComponentSelectionService();
-    const suggestionService = SuggestionService();
-
-    // Setup demo patients
-    final chika = PatientModel()
-      ..id = 1
-      ..remoteId = 'PAT-001'
-      ..name = 'Chika Okafor'
-      ..dateOfBirth =
-          DateTime(1998, 4, 15) // 28 years old
-      ..gender = 'Female'
-      ..emergencyContact = '+234 801 234 5678'
-      ..medicalConditions = ['Migraine with aura']
-      ..allergies = ['Penicillin']
-      ..medications = ['Sumatriptan 50mg PRN']
-      ..height = 168.0
-      ..weight = 64.0
-      ..isSynced = true
-      ..updatedAt = DateTime.now();
 
     final johnDoe = PatientModel()
       ..id = 2
@@ -874,6 +854,58 @@ Please monitor daily.
       final bpResult = await executor.executeWorkflowAction(bpQueryState);
       expect(bpResult.isSuccess, isTrue);
       expect(bpResult.actionType, AppActionType.generalQuery);
+
+      // 4. Enable AI consent conversational utterance
+      final consentState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: 'Please enable AI sharing',
+      );
+      final consentResult = await executor.executeWorkflowAction(consentState);
+      expect(consentResult.isSuccess, isTrue);
+      expect(consentResult.summaryText, contains('AI Data Sharing has been successfully enabled'));
+
+      // 5. Normal vital ranges inquiry does not return "Consent Required" dead-end
+      final vitalsQueryState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: 'What are normal vital signs ranges?',
+      );
+      final vitalsResult = await executor.executeWorkflowAction(vitalsQueryState);
+      expect(vitalsResult.isSuccess, isTrue);
+      expect(vitalsResult.summaryText, contains('Blood Pressure: <120/80 mmHg'));
+      expect(vitalsResult.summaryText.toLowerCase(), isNot(contains('consent required')));
+    });
+
+    test('SuggestionService suggests Enable Live AI Assistant when hasAiConsent is false', () {
+      const suggestionService = SuggestionService();
+      final suggestionsWithoutConsent = suggestionService.resolveSuggestions(
+        intent: 'general_query',
+        workflowStatus: 'completed',
+        hasAiConsent: false,
+      );
+
+      expect(
+        suggestionsWithoutConsent.any((a) => a.id == 'enable_ai_sharing'),
+        isTrue,
+      );
+
+      final suggestionsWithConsent = suggestionService.resolveSuggestions(
+        intent: 'general_query',
+        workflowStatus: 'completed',
+        hasAiConsent: true,
+      );
+
+      expect(
+        suggestionsWithConsent.any((a) => a.id == 'enable_ai_sharing'),
+        isFalse,
+      );
+    });
+
+    test('AiService emergency check is never blocked by consent status', () async {
+      final aiService = AiService(null);
+      final emergencyResponse = await aiService.askAssistant('I have severe chest pain and cannot breathe');
+      expect(emergencyResponse, contains('EMERGENCY MEDICAL NOTICE'));
+      expect(emergencyResponse, contains('911'));
+      expect(emergencyResponse.toLowerCase(), isNot(contains('consent required')));
     });
   });
 }

@@ -8,6 +8,9 @@ import '../../../../features/reminders/data/models/reminder_model.dart';
 import '../../../../features/reminders/domain/repositories/reminder_repository.dart';
 import '../../../../features/vitals/data/models/vital_record.dart';
 import '../../../../features/vitals/domain/repositories/vitals_repository.dart';
+import '../../di/injection.dart';
+import '../../../../features/settings/presentation/bloc/settings_bloc.dart';
+import '../../../../features/settings/presentation/bloc/settings_event.dart';
 import '../../services/ai_service.dart';
 import '../models/conversation_intent.dart';
 import '../models/conversation_workflow_state.dart';
@@ -134,12 +137,6 @@ class ActionExecutor {
 
         case ConversationIntent.generalQuery:
           return await _executeGeneralQuery(state);
-
-        default:
-          return ActionExecutionResult.failure(
-            errorMessage: 'Unsupported action for intent ${state.intent}.',
-            actionType: _mapIntentToAction(state.intent),
-          );
       }
     } catch (e) {
       return ActionExecutionResult.failure(
@@ -397,6 +394,24 @@ class ActionExecutor {
     final utterance = state.lastUserUtterance;
     final lower = utterance.toLowerCase().trim();
 
+    // 0. Enable AI Consent direct conversational command
+    if (lower.contains('enable ai') ||
+        lower.contains('grant consent') ||
+        lower.contains('grant ai') ||
+        lower.contains('allow ai') ||
+        lower.contains('turn on ai') ||
+        lower.contains('activate ai')) {
+      if (locator.isRegistered<SettingsBloc>()) {
+        locator<SettingsBloc>().add(const AiConsentToggled(true));
+      }
+      return ActionExecutionResult.success(
+        summaryText:
+            "✓ AI Data Sharing has been successfully enabled! Live Gemini AI clinical insights and assistant features are now active.",
+        actionType: AppActionType.generalQuery,
+        data: "ai_consent_enabled",
+      );
+    }
+
     // 1. High blood pressure patients query
     if (lower.contains('high blood pressure') || lower.contains('hypertension') || lower.contains('high bp')) {
       final allPatients = await patientRepository.getPatients();
@@ -425,11 +440,12 @@ class ActionExecutor {
       );
     }
 
-    // 2. Try AiService if configured
-    if (aiService != null && aiService!.isConfigured) {
+    // 2. Try AiService if configured AND consented
+    if (aiService != null && aiService!.isConfigured && aiService!.hasConsent) {
       try {
         final aiAnswer = await aiService!.askAssistant(utterance);
-        if (aiAnswer.trim().isNotEmpty) {
+        if (aiAnswer.trim().isNotEmpty &&
+            !aiAnswer.toLowerCase().contains('consent required')) {
           return ActionExecutionResult.success(
             summaryText: aiAnswer,
             actionType: AppActionType.generalQuery,
@@ -439,7 +455,7 @@ class ActionExecutor {
       } catch (_) {}
     }
 
-    // 3. Clinical domain conversational responses
+    // 3. Clinical domain conversational responses (offline, PHI-safe)
     final answer = _generateClinicalGeneralAnswer(utterance);
     return ActionExecutionResult.success(
       summaryText: answer,
@@ -459,8 +475,24 @@ class ActionExecutor {
       return "Hello! I am VitalAI, your clinical assistant. How can I help you manage your patients, review vital signs, or draft notes today?";
     }
 
+    if (lower.contains('consent') || lower.contains('ai sharing') || lower.contains('privacy')) {
+      return "To safeguard patient confidentiality, VitalAI requires consent before sending health records to cloud AI services. You can toggle AI Data Sharing anytime in Profile > Settings or by saying 'Enable AI'.";
+    }
+
     if (lower.contains('normal blood pressure') || lower.contains('normal bp') || lower.contains('target bp')) {
       return "Normal resting adult blood pressure is defined as systolic below 120 mmHg and diastolic below 80 mmHg. Elevated is 120–129/<80 mmHg, Stage 1 Hypertension is 130–139/80–89 mmHg, and Stage 2 Hypertension is ≥140/≥90 mmHg.";
+    }
+
+    if (lower.contains('heart rate') || lower.contains('pulse') || lower.contains('tachycardia') || lower.contains('bradycardia')) {
+      return "Normal resting adult heart rate is 60–100 beats per minute (bpm). A resting rate consistently over 100 bpm is tachycardia, while below 60 bpm is bradycardia (which can be normal in endurance athletes).";
+    }
+
+    if (lower.contains('temperature') || lower.contains('fever')) {
+      return "Normal core body temperature ranges from 36.5 °C to 37.5 °C (97.7 °F – 99.5 °F). A core reading of 38.0 °C (100.4 °F) or above is classified as a fever (pyrexia).";
+    }
+
+    if (lower.contains('oxygen') || lower.contains('spo2') || lower.contains('saturation')) {
+      return "Normal peripheral blood oxygen saturation (SpO2) ranges between 95% and 100%. Readings consistently below 90% indicate hypoxemia requiring immediate clinical evaluation.";
     }
 
     if (lower.contains('vital signs') || lower.contains('vitals range') || lower.contains('normal vitals')) {

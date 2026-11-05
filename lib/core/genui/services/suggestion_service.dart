@@ -16,6 +16,7 @@ class SuggestionService {
     bool isChartDisplayed = false,
     bool hasMissingInfo = false,
     bool isOptionalQuestion = false,
+    bool hasAiConsent = true,
     List<String> previousSuggestions = const [],
   }) {
     final List<GenUiAction> candidates = [];
@@ -161,6 +162,16 @@ class SuggestionService {
     }
 
     // 7. General AI responses / Default
+    if (!hasAiConsent) {
+      candidates.add(
+        const GenUiAction(
+          id: 'enable_ai_sharing',
+          type: GenUiActionType.custom,
+          label: 'Enable Live AI Assistant',
+        ),
+      );
+    }
+
     candidates.addAll([
       const GenUiAction(
         id: 'default_check_bp',

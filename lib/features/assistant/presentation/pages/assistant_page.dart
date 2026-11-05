@@ -35,6 +35,8 @@ import '../../../../core/genui/models/genui_action.dart';
 import '../../../../core/genui/models/genui_component.dart';
 import '../../../../core/genui/components/suggestion_card.dart';
 import '../../../../core/genui/services/suggestion_service.dart';
+import '../../../settings/presentation/bloc/settings_bloc.dart';
+import '../../../settings/presentation/bloc/settings_event.dart';
 
 enum AssistantUiState {
   idle,
@@ -407,6 +409,7 @@ class _AssistantPageState extends State<AssistantPage>
         patientId: state.activePatient?.id.toString(),
         patientName: state.activePatient?.name,
         hasCompletedAction: true,
+        hasAiConsent: _hasAiConsent(),
       );
 
       setState(() {
@@ -499,9 +502,46 @@ class _AssistantPageState extends State<AssistantPage>
       case GenUiActionType.cancelWorkflow:
         _workflowBloc.add(const ConversationWorkflowCancelled());
         break;
+      case GenUiActionType.custom:
+        if (action.id == 'enable_ai_sharing' ||
+            action.id == 'enable_ai_consent' ||
+            action.id == 'grant_consent') {
+          try {
+            if (locator.isRegistered<SettingsBloc>()) {
+              locator<SettingsBloc>().add(const AiConsentToggled(true));
+            } else {
+              context.read<SettingsBloc>().add(const AiConsentToggled(true));
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ AI Data Sharing enabled. Live Gemini AI assistant is active.'),
+                backgroundColor: AppColors.primary,
+                duration: Duration(seconds: 3),
+              ),
+            );
+            _updateOrAddAiMessage(
+              '✓ AI Data Sharing has been successfully enabled! Live Gemini AI clinical analysis is now active.',
+              null,
+            );
+          } catch (_) {}
+          return;
+        }
+        _processTranscript(action.label);
+        break;
       default:
         _processTranscript(action.label);
         break;
+    }
+  }
+
+  bool _hasAiConsent() {
+    try {
+      if (locator.isRegistered<SettingsBloc>()) {
+        return locator<SettingsBloc>().state.aiConsent;
+      }
+      return context.read<SettingsBloc>().state.aiConsent;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -1117,6 +1157,72 @@ class _AssistantPageState extends State<AssistantPage>
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    if (!_hasAiConsent()) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F2942) : const Color(0xFFE0F2FE),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFBAE6FD),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_user_outlined,
+                              size: 22,
+                              color: Color(0xFF0284C7),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'AI Data Sharing is off. Enable it to unlock live Gemini clinical intelligence.',
+                                style: AppTypography.bodySmall(
+                                  color: isDark ? Colors.white70 : const Color(0xFF0369A1),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: const Color(0xFF0284C7),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: () {
+                                if (locator.isRegistered<SettingsBloc>()) {
+                                  locator<SettingsBloc>().add(const AiConsentToggled(true));
+                                } else {
+                                  context.read<SettingsBloc>().add(const AiConsentToggled(true));
+                                }
+                                setState(() {});
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('✓ AI Data Sharing enabled. Live Gemini AI assistant is active.'),
+                                    backgroundColor: AppColors.primary,
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Enable',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     // "Try saying" Suggestions Container
                     Container(
