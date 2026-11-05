@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vitalai/core/di/injection.dart';
+import 'package:vitalai/features/auth/domain/repositories/auth_repository.dart';
 import '../../features/patients/data/models/patient_model.dart';
 import '../../features/vitals/data/models/vital_record.dart';
 import '../../features/ai_assistant/data/models/chat_conversation.dart';
@@ -13,8 +15,29 @@ import '../../features/patients/data/models/clinical_note.dart';
 class DbService {
   final FlutterSecureStorage secureStorage;
   SharedPreferences? _prefs;
+  String? Function()? _currentUserIdProvider;
 
-  DbService(this.secureStorage);
+  DbService(this.secureStorage, {String? Function()? currentUserIdProvider})
+      : _currentUserIdProvider = currentUserIdProvider;
+
+  /// Custom provider to supply current user ID for scoping data per user.
+  void setUserIdProvider(String? Function()? provider) {
+    _currentUserIdProvider = provider;
+  }
+
+  /// Scopes a storage key by the authenticated user's UID to isolate clinical data across accounts.
+  String _userKey(String baseKey) {
+    String? uid;
+    if (_currentUserIdProvider != null) {
+      uid = _currentUserIdProvider!();
+    } else if (locator.isRegistered<AuthRepository>()) {
+      uid = locator<AuthRepository>().currentUser?.uid;
+    }
+    if (uid != null && uid.isNotEmpty) {
+      return '${uid}_$baseKey';
+    }
+    return baseKey;
+  }
 
   /// Initialize SharedPreferences.
   Future<void> init({dynamic additionalSchemas}) async {
@@ -23,7 +46,7 @@ class DbService {
 
   /// Retrieve all patient profiles.
   Future<List<PatientModel>> getPatients() async {
-    final raw = _prefs?.getString('patients');
+    final raw = _prefs?.getString(_userKey('patients'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -36,12 +59,12 @@ class DbService {
   /// Save all patient profiles.
   Future<void> savePatients(List<PatientModel> patients) async {
     final raw = jsonEncode(patients.map((p) => p.toJson()).toList());
-    await _prefs?.setString('patients', raw);
+    await _prefs?.setString(_userKey('patients'), raw);
   }
 
   /// Retrieve all vitals records.
   Future<List<VitalRecord>> getVitals() async {
-    final raw = _prefs?.getString('vitals');
+    final raw = _prefs?.getString(_userKey('vitals'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -54,12 +77,12 @@ class DbService {
   /// Save all vitals records.
   Future<void> saveVitals(List<VitalRecord> vitals) async {
     final raw = jsonEncode(vitals.map((v) => v.toJson()).toList());
-    await _prefs?.setString('vitals', raw);
+    await _prefs?.setString(_userKey('vitals'), raw);
   }
 
   /// Retrieve all chat conversations for a specific patient.
   Future<List<ChatConversation>> getConversations(int patientId) async {
-    final raw = _prefs?.getString('ai_conversations_$patientId');
+    final raw = _prefs?.getString(_userKey('ai_conversations_$patientId'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -72,17 +95,17 @@ class DbService {
   /// Save all chat conversations for a specific patient.
   Future<void> saveConversations(int patientId, List<ChatConversation> conversations) async {
     final raw = jsonEncode(conversations.map((c) => c.toJson()).toList());
-    await _prefs?.setString('ai_conversations_$patientId', raw);
+    await _prefs?.setString(_userKey('ai_conversations_$patientId'), raw);
   }
 
   /// Clear all conversations for a specific patient.
   Future<void> clearConversations(int patientId) async {
-    await _prefs?.remove('ai_conversations_$patientId');
+    await _prefs?.remove(_userKey('ai_conversations_$patientId'));
   }
 
   /// Retrieve all health reminders for a specific patient profile.
   Future<List<ReminderModel>> getReminders(int patientId) async {
-    final raw = _prefs?.getString('reminders_$patientId');
+    final raw = _prefs?.getString(_userKey('reminders_$patientId'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -94,18 +117,18 @@ class DbService {
 
   /// Check if reminders key has been initialized for a patient profile.
   bool hasRemindersInitialized(int patientId) {
-    return _prefs?.containsKey('reminders_$patientId') ?? false;
+    return _prefs?.containsKey(_userKey('reminders_$patientId')) ?? false;
   }
 
   /// Save all health reminders for a specific patient profile.
   Future<void> saveReminders(int patientId, List<ReminderModel> reminders) async {
     final raw = jsonEncode(reminders.map((r) => r.toJson()).toList());
-    await _prefs?.setString('reminders_$patientId', raw);
+    await _prefs?.setString(_userKey('reminders_$patientId'), raw);
   }
 
   /// Retrieve all clinical activities.
   Future<List<ActivityItem>> getActivities() async {
-    final raw = _prefs?.getString('activities_log');
+    final raw = _prefs?.getString(_userKey('activities_log'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -118,12 +141,12 @@ class DbService {
   /// Save all clinical activities.
   Future<void> saveActivities(List<ActivityItem> activities) async {
     final raw = jsonEncode(activities.map((a) => a.toJson()).toList());
-    await _prefs?.setString('activities_log', raw);
+    await _prefs?.setString(_userKey('activities_log'), raw);
   }
 
   /// Retrieve clinical notes for a patient.
   Future<List<ClinicalNote>> getClinicalNotes(int patientId) async {
-    final raw = _prefs?.getString('clinical_notes_$patientId');
+    final raw = _prefs?.getString(_userKey('clinical_notes_$patientId'));
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List;
@@ -136,7 +159,7 @@ class DbService {
   /// Save clinical notes for a patient.
   Future<void> saveClinicalNotes(int patientId, List<ClinicalNote> notes) async {
     final raw = jsonEncode(notes.map((n) => n.toJson()).toList());
-    await _prefs?.setString('clinical_notes_$patientId', raw);
+    await _prefs?.setString(_userKey('clinical_notes_$patientId'), raw);
   }
 
   /// Clear database contents.

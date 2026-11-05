@@ -29,6 +29,9 @@ enum ConversationIntent {
   /// Query patient longitudinal history, summaries, notes, or vitals
   queryPatientHistory,
 
+  /// Switch active patient conversation context
+  switchPatient,
+
   /// General clinical query or fallback
   generalQuery,
 }
@@ -54,6 +57,8 @@ extension ConversationIntentX on ConversationIntent {
         return 'Follow-ups & Appointments';
       case ConversationIntent.queryPatientHistory:
         return 'Patient History & Summaries';
+      case ConversationIntent.switchPatient:
+        return 'Switch Patient';
       case ConversationIntent.generalQuery:
         return 'Clinical Assistant';
     }
@@ -79,6 +84,8 @@ extension ConversationIntentX on ConversationIntent {
         return Icons.calendar_today_rounded;
       case ConversationIntent.queryPatientHistory:
         return Icons.history_edu_rounded;
+      case ConversationIntent.switchPatient:
+        return Icons.swap_horiz_rounded;
       case ConversationIntent.generalQuery:
         return Icons.smart_toy_rounded;
     }
@@ -97,6 +104,7 @@ extension ConversationIntentX on ConversationIntent {
       case ConversationIntent.findPatient:
       case ConversationIntent.openPatientDetails:
       case ConversationIntent.queryPatientHistory:
+      case ConversationIntent.switchPatient:
       case ConversationIntent.generalQuery:
         return false;
     }

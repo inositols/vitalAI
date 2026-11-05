@@ -56,6 +56,9 @@ class FollowUpQuestionResolver {
       case ConversationIntent.updatePatientInfo:
         return _resolveUpdatePatientQuestion(state, existingPatients);
 
+      case ConversationIntent.switchPatient:
+        return _resolveSwitchPatientQuestion(state, existingPatients);
+
       case ConversationIntent.openPatientDetails:
       case ConversationIntent.findPatient:
         return _resolvePatientLookupQuestion(state, existingPatients);
@@ -176,6 +179,20 @@ class FollowUpQuestionResolver {
     return null;
   }
 
+  FollowUpQuestion? _resolveSwitchPatientQuestion(
+    ConversationWorkflowState state,
+    List<PatientModel> existingPatients,
+  ) {
+    if (state.activePatient != null && state.parameters.containsKey('patientId')) {
+      return null;
+    }
+
+    return _buildPatientSelectionQuestion(
+      'Which patient would you like to switch to?',
+      existingPatients,
+    );
+  }
+
   FollowUpQuestion? _resolveCreatePatientQuestion(ConversationWorkflowState state) {
     // 1. Full legal name (Required)
     if (!state.parameters.containsKey('name') ||
@@ -189,9 +206,136 @@ class FollowUpQuestionResolver {
       );
     }
 
+    final name = state.parameters['name'].toString().trim();
+    final hasAgeOrDob = state.parameters.containsKey('dateOfBirth') || state.parameters.containsKey('age');
+    final hasClinicalInfo = state.parameters.containsKey('complaint') ||
+        state.parameters.containsKey('systolic') ||
+        state.parameters.containsKey('bodyTemperature');
+
+    // If name and age/dob are already supplied AND clinical details (vitals/complaint) were supplied:
+    // The request is complete! Move directly to confirmation review!
+    if (hasAgeOrDob && hasClinicalInfo) {
+      if (!state.isConfirmed) {
+        return FollowUpQuestion(
+          id: 'patient_creation_confirmation',
+          targetField: 'confirmed',
+          promptText: 'Ready to register $name. Please review the details below:',
+          questionType: GenUiQuestionType.confirmationCard,
+          metadata: Map<String, dynamic>.from(state.parameters),
+        );
+      }
+      return null;
+    }
+
+    // If user selected next_step == 'review_and_save':
+    if (state.parameters['next_step'] == 'review_and_save') {
+      if (!state.isConfirmed) {
+        return FollowUpQuestion(
+          id: 'patient_creation_confirmation',
+          targetField: 'confirmed',
+          promptText: 'Ready to register $name. Please review the details below:',
+          questionType: GenUiQuestionType.confirmationCard,
+          metadata: Map<String, dynamic>.from(state.parameters),
+        );
+      }
+      return null;
+    }
+
+    // If user chose to record vitals:
+    if (state.parameters['next_step'] == 'record_vitals') {
+      if (!state.parameters.containsKey('vital_selection')) {
+        return const FollowUpQuestion(
+          id: 'vital_selection',
+          targetField: 'vital_selection',
+          promptText: 'Which vitals would you like to record?',
+          questionType: GenUiQuestionType.singleChoice,
+          options: [
+            FollowUpOption(label: 'Blood Pressure', value: 'bp', subtitle: 'Systolic / Diastolic readings'),
+            FollowUpOption(label: 'Temperature', value: 'temp', subtitle: 'Oral / Axillary temp'),
+            FollowUpOption(label: 'Pulse Rate', value: 'pulse', subtitle: 'Resting heart rate in bpm'),
+            FollowUpOption(label: 'All Vitals', value: 'all', subtitle: 'Comprehensive observation panel'),
+          ],
+        );
+      }
+
+      final vitalType = state.parameters['vital_selection']?.toString();
+      if ((vitalType == 'bp' || vitalType == 'all') && (!state.parameters.containsKey('systolic') || state.parameters['systolic'] == null)) {
+        return const FollowUpQuestion(
+          id: 'bp_systolic',
+          targetField: 'systolic',
+          promptText: 'What is the systolic reading (mmHg)?',
+          questionType: GenUiQuestionType.numericInput,
+          unit: 'mmHg',
+          minValue: 60,
+          maxValue: 300,
+          initialValue: 120,
+        );
+      }
+      if ((vitalType == 'bp' || vitalType == 'all') && (!state.parameters.containsKey('diastolic') || state.parameters['diastolic'] == null)) {
+        return const FollowUpQuestion(
+          id: 'bp_diastolic',
+          targetField: 'diastolic',
+          promptText: 'What is the diastolic reading (mmHg)?',
+          questionType: GenUiQuestionType.numericInput,
+          unit: 'mmHg',
+          minValue: 30,
+          maxValue: 200,
+          initialValue: 80,
+        );
+      }
+      if ((vitalType == 'temp' || vitalType == 'all') && (!state.parameters.containsKey('bodyTemperature') || state.parameters['bodyTemperature'] == null)) {
+        return const FollowUpQuestion(
+          id: 'temp_input',
+          targetField: 'bodyTemperature',
+          promptText: 'What is the body temperature (°C)?',
+          questionType: GenUiQuestionType.numericInput,
+          unit: '°C',
+          minValue: 30,
+          maxValue: 45,
+          initialValue: 37.0,
+        );
+      }
+
+      if (!state.isConfirmed) {
+        return FollowUpQuestion(
+          id: 'patient_creation_confirmation',
+          targetField: 'confirmed',
+          promptText: 'Ready to register $name with recorded vitals. Please confirm:',
+          questionType: GenUiQuestionType.confirmationCard,
+          metadata: Map<String, dynamic>.from(state.parameters),
+        );
+      }
+      return null;
+    }
+
+    // If user chose to add clinical notes:
+    if (state.parameters['next_step'] == 'add_notes') {
+      if (!state.parameters.containsKey('complaint') || state.parameters['complaint'] == null) {
+        return const FollowUpQuestion(
+          id: 'patient_complaint',
+          targetField: 'complaint',
+          promptText: 'What is the presenting complaint or reason for visit?',
+          questionType: GenUiQuestionType.textInput,
+          helpText: 'e.g. Headache for two days, fever and fatigue',
+        );
+      }
+      if (!state.isConfirmed) {
+        return FollowUpQuestion(
+          id: 'patient_creation_confirmation',
+          targetField: 'confirmed',
+          promptText: 'Ready to register $name with visit notes. Please confirm:',
+          questionType: GenUiQuestionType.confirmationCard,
+          metadata: Map<String, dynamic>.from(state.parameters),
+        );
+      }
+      return null;
+    }
+
     // 2. Date of birth (Optional)
     if (!state.parameters.containsKey('dateOfBirth') &&
-        !state.parameters.containsKey('skip_dateOfBirth')) {
+        !state.parameters.containsKey('skip_dateOfBirth') &&
+        !state.parameters.containsKey('age') &&
+        !state.parameters.containsKey('next_step')) {
       return const FollowUpQuestion(
         id: 'patient_dob',
         targetField: 'dateOfBirth',
@@ -204,7 +348,8 @@ class FollowUpQuestionResolver {
 
     // 3. Contact phone (Optional)
     if (!state.parameters.containsKey('phone') &&
-        !state.parameters.containsKey('skip_phone')) {
+        !state.parameters.containsKey('skip_phone') &&
+        !state.parameters.containsKey('next_step')) {
       return const FollowUpQuestion(
         id: 'patient_phone',
         targetField: 'phone',
@@ -217,7 +362,8 @@ class FollowUpQuestionResolver {
 
     // 4. Biological sex (Optional)
     if (!state.parameters.containsKey('gender') &&
-        !state.parameters.containsKey('skip_gender')) {
+        !state.parameters.containsKey('skip_gender') &&
+        !state.parameters.containsKey('next_step')) {
       return const FollowUpQuestion(
         id: 'patient_gender',
         targetField: 'gender',
@@ -237,7 +383,7 @@ class FollowUpQuestionResolver {
       return FollowUpQuestion(
         id: 'patient_creation_confirmation',
         targetField: 'confirmed',
-        promptText: 'Ready to register ${state.parameters['name']}. Please confirm:',
+        promptText: 'Ready to register $name. Please confirm:',
         questionType: GenUiQuestionType.confirmationCard,
         metadata: Map<String, dynamic>.from(state.parameters),
       );

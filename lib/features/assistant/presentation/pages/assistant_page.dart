@@ -41,8 +41,12 @@ import '../../../settings/presentation/bloc/settings_event.dart';
 enum AssistantUiState {
   idle,
   listening,
+  stopping,
+  transcribing,
   processing,
+  awaitingInteraction,
   responding,
+  completed,
   error,
   permissionRequired,
 }
@@ -64,9 +68,20 @@ class _AssistantPageState extends State<AssistantPage>
   stt.SpeechToText? _speech;
   bool _speechAvailable = false;
   String _currentTranscript = '';
+  Timer? _silenceTimer;
 
-  // Conversational state
-  final List<Map<String, dynamic>> _messages = [];
+  // Conversational state per patient
+  final Map<int, List<Map<String, dynamic>>> _patientConversations = {};
+  final List<Map<String, dynamic>> _generalConversations = [];
+
+  List<Map<String, dynamic>> get _messages {
+    final patient = _getActivePatient();
+    if (patient != null) {
+      return _patientConversations.putIfAbsent(patient.id, () => []);
+    }
+    return _generalConversations;
+  }
+
   bool _isTtsPlaying = false;
 
   // Universal Conversational Workflow BLoC
@@ -149,12 +164,198 @@ class _AssistantPageState extends State<AssistantPage>
 
   @override
   void dispose() {
+    _silenceTimer?.cancel();
     _speech?.stop();
     _workflowSubscription?.cancel();
     _workflowBloc.close();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Widget _buildActivePatientPill(bool isDark) {
+    final activePatient = _getActivePatient();
+    return GestureDetector(
+      onTap: () => _showPatientSwitchModal(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: activePatient != null
+              ? AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.08)
+              : (isDark ? AppColors.darkSurface : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: activePatient != null
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : (isDark ? AppColors.darkBorder : const Color(0xFFCBD5E1)),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              activePatient != null ? Icons.person_rounded : Icons.person_outline_rounded,
+              size: 15,
+              color: activePatient != null ? AppColors.primary : const Color(0xFF94A3B8),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                activePatient != null
+                    ? 'Active: ${activePatient.name}'
+                    : 'No active patient • Tap to switch',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: activePatient != null
+                      ? (isDark ? Colors.white : AppColors.secondary)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.swap_horiz_rounded,
+              size: 15,
+              color: activePatient != null ? AppColors.primary : const Color(0xFF94A3B8),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPatientSwitchModal(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final patients = _getExistingPatients();
+    final activePatient = _getActivePatient();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Switch Active Patient Context',
+                      style: AppTypography.titleMedium(
+                        color: isDark ? Colors.white : AppColors.secondary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (patients.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.person_off_rounded,
+                            size: 36,
+                            color: isDark ? AppColors.darkTextSecondary : const Color(0xFF94A3B8),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No patients registered yet.',
+                            style: TextStyle(
+                              color: isDark ? AppColors.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: patients.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, index) {
+                        final p = patients[index];
+                        final isSelected = activePatient?.id == p.id;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+                          leading: CircleAvatar(
+                            backgroundColor: isSelected
+                                ? AppColors.primary
+                                : (isDark ? AppColors.darkBackground : const Color(0xFFE2E8F0)),
+                            child: Icon(
+                              Icons.person_rounded,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                              size: 18,
+                            ),
+                          ),
+                          title: Text(
+                            p.name,
+                            style: TextStyle(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? AppColors.primary : (isDark ? Colors.white : AppColors.secondary),
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Age: ${p.age} • ${p.gender ?? "Unknown"} • ID: #${p.id}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppColors.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle_rounded, color: AppColors.primary)
+                              : null,
+                          onTap: () {
+                            context.read<PatientBloc>().add(PatientSelected(p));
+                            Navigator.pop(sheetContext);
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: const Text('Add New Patient via Voice/Text'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _processTranscript('Create a new patient.');
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String _getGreeting() {
@@ -165,6 +366,7 @@ class _AssistantPageState extends State<AssistantPage>
   }
 
   void _startVoiceListening() async {
+    _silenceTimer?.cancel();
     setState(() {
       _currentTranscript = '';
       _uiState = AssistantUiState.listening;
@@ -173,7 +375,7 @@ class _AssistantPageState extends State<AssistantPage>
     if (!_speechAvailable) {
       // Simulate real-time voice speech for desktop/emulator or when mic uninitialized
       _simulateVoiceTyping(
-        "I want to record my blood pressure. It's 118 over 76.",
+        "Add a new patient called Chika Okafor. She is 28 years old. She came in complaining of a headache that has lasted two days. Her blood pressure is 118 over 76 and her temperature is 37.2 degrees.",
       );
       return;
     }
@@ -181,11 +383,26 @@ class _AssistantPageState extends State<AssistantPage>
     try {
       await _speech!.listen(
         onResult: (result) {
-          if (mounted) {
-            setState(() {
-              _currentTranscript = result.recognizedWords;
-            });
+          if (!mounted) return;
+          setState(() {
+            _currentTranscript = result.recognizedWords;
+          });
+
+          // 1. If final result emitted by speech engine, immediately auto-execute
+          if (result.finalResult) {
+            _stopVoiceListening();
+            return;
           }
+
+          // 2. Silence detection: if user pauses after speaking, auto-stop and execute
+          _silenceTimer?.cancel();
+          _silenceTimer = Timer(const Duration(milliseconds: 1400), () {
+            if (mounted &&
+                _uiState == AssistantUiState.listening &&
+                _currentTranscript.trim().isNotEmpty) {
+              _stopVoiceListening();
+            }
+          });
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.confirmation,
@@ -195,7 +412,7 @@ class _AssistantPageState extends State<AssistantPage>
     } catch (e) {
       // Graceful fallback to voice simulation
       _simulateVoiceTyping(
-        "I want to record my blood pressure. It's 118 over 76.",
+        "Add a new patient called Chika Okafor. She is 28 years old. She came in complaining of a headache that has lasted two days. Her blood pressure is 118 over 76 and her temperature is 37.2 degrees.",
       );
     }
   }
@@ -205,28 +422,38 @@ class _AssistantPageState extends State<AssistantPage>
     String buffer = '';
     for (int i = 0; i < words.length; i++) {
       if (_uiState != AssistantUiState.listening) return;
-      await Future.delayed(const Duration(milliseconds: 250));
+      await Future.delayed(const Duration(milliseconds: 180));
       if (!mounted || _uiState != AssistantUiState.listening) return;
       buffer = words.sublist(0, i + 1).join(' ');
       setState(() {
         _currentTranscript = buffer;
       });
     }
+
+    // Auto-advance to execution after voice simulation finishes typing
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (mounted && _uiState == AssistantUiState.listening) {
+      _stopVoiceListening();
+    }
   }
 
   void _stopVoiceListening() {
+    _silenceTimer?.cancel();
     try {
       _speech?.stop();
     } catch (_) {}
 
     if (_currentTranscript.trim().isNotEmpty) {
-      _processTranscript(_currentTranscript.trim());
+      final transcript = _currentTranscript.trim();
+      _currentTranscript = '';
+      _processTranscript(transcript);
     } else {
       setState(() => _uiState = AssistantUiState.idle);
     }
   }
 
   void _cancelVoiceListening() {
+    _silenceTimer?.cancel();
     try {
       _speech?.stop();
     } catch (_) {}
@@ -318,7 +545,7 @@ class _AssistantPageState extends State<AssistantPage>
 
       setState(() {
         _updateOrAddAiMessage(questionText, followUpWidget);
-        _uiState = AssistantUiState.responding;
+        _uiState = AssistantUiState.awaitingInteraction;
       });
 
       _speakText(questionText);
@@ -331,6 +558,21 @@ class _AssistantPageState extends State<AssistantPage>
       Widget? resultWidget;
 
       switch (state.intent) {
+        case ConversationIntent.switchPatient:
+          final p = state.executionResult as PatientModel?;
+          if (p != null) {
+            responseText = "Switched active context to ${p.name}.";
+            try {
+              context.read<PatientBloc>().add(PatientSelected(p));
+            } catch (_) {}
+          } else {
+            responseText = state.parameters['patientName'] != null
+                ? "Switched context to ${state.parameters['patientName']}."
+                : "Active patient context updated.";
+          }
+          resultWidget = _buildGenUiPatientList();
+          break;
+
         case ConversationIntent.recordVitals:
           final vitals = state.executionResult as VitalRecord?;
           final sys =
@@ -354,6 +596,11 @@ class _AssistantPageState extends State<AssistantPage>
           final p = state.executionResult as PatientModel?;
           final name = p?.name ?? state.parameters['name'] ?? 'new patient';
           responseText = "Patient $name has been registered successfully.";
+          if (p != null) {
+            try {
+              context.read<PatientBloc>().add(PatientSelected(p));
+            } catch (_) {}
+          }
           resultWidget = _buildGenUiPatientList();
           break;
 
@@ -447,7 +694,7 @@ class _AssistantPageState extends State<AssistantPage>
           resultWidget,
           suggestions: suggestions,
         );
-        _uiState = AssistantUiState.responding;
+        _uiState = AssistantUiState.completed;
       });
 
       _speakText(responseText);
@@ -924,8 +1171,10 @@ class _AssistantPageState extends State<AssistantPage>
       );
     }
 
-    // 3. Conversational GenUI Mode (Responding / Chat)
-    if (_uiState == AssistantUiState.responding) {
+    // 3. Conversational GenUI Mode (Responding / Chat / Completed / Awaiting Interaction)
+    if (_uiState == AssistantUiState.responding ||
+        _uiState == AssistantUiState.completed ||
+        _uiState == AssistantUiState.awaitingInteraction) {
       return Scaffold(
         backgroundColor: isDark
             ? AppColors.darkBackground
@@ -942,12 +1191,8 @@ class _AssistantPageState extends State<AssistantPage>
             ),
             onPressed: () => setState(() => _uiState = AssistantUiState.idle),
           ),
-          title: Text(
-            'VoiceVitals',
-            style: AppTypography.titleLarge(
-              color: isDark ? Colors.white : AppColors.secondary,
-            ),
-          ),
+          title: _buildActivePatientPill(isDark),
+          centerTitle: true,
           actions: [
             if (_isTtsPlaying)
               IconButton(
@@ -1195,7 +1440,9 @@ class _AssistantPageState extends State<AssistantPage>
                             : AppColors.lightTextSecondary,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    _buildActivePatientPill(isDark),
+                    const SizedBox(height: 16),
 
                     if (!_hasAiConsent()) ...[
                       Container(

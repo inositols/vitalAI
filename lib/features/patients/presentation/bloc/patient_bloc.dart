@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/repositories/patient_repository.dart';
 import '../../data/models/patient_model.dart';
@@ -12,6 +13,7 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
   final PatientRepository patientRepository;
   final AuthRepository? authRepository;
   PatientModel? _activePatient;
+  StreamSubscription<AuthUser?>? _authSubscription;
 
   PatientBloc({
     required this.patientRepository,
@@ -21,6 +23,11 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
     on<PatientSelected>(_onPatientSelected);
     on<PatientSaved>(_onPatientSaved);
     on<PatientDeleted>(_onPatientDeleted);
+
+    _authSubscription = authRepository?.authStateChanges.listen((_) {
+      _activePatient = null;
+      add(PatientListRequested());
+    });
   }
 
   Future<void> _onPatientListRequested(
@@ -86,5 +93,11 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
     } catch (e) {
       emit(PatientFailure(e.toString()));
     }
+  }
+
+  @override
+  Future<void> close() {
+    _authSubscription?.cancel();
+    return super.close();
   }
 }

@@ -30,6 +30,7 @@ enum AppActionType {
   queryPatientHistory,
   compareVitals,
   openPatientDetails,
+  switchPatient,
   generalQuery,
 }
 
@@ -139,6 +140,9 @@ class ActionExecutor {
         case ConversationIntent.findPatient:
           return await _executeOpenPatient(state);
 
+        case ConversationIntent.switchPatient:
+          return await _executeSwitchPatient(state);
+
         case ConversationIntent.generalQuery:
           return await _executeGeneralQuery(state);
       }
@@ -193,10 +197,12 @@ class ActionExecutor {
   Future<ActionExecutionResult> _executeCreatePatient(ConversationWorkflowState state) async {
     final name = state.parameters['name']?.toString().trim() ?? '';
     final dob = state.parameters['dateOfBirth'] as DateTime? ??
-        DateTime.now().subtract(const Duration(days: 365 * 30));
+        (state.parameters['age'] is num
+            ? DateTime(DateTime.now().year - (state.parameters['age'] as num).toInt(), 1, 1)
+            : DateTime.now().subtract(const Duration(days: 365 * 30)));
     final phone = state.parameters['phone']?.toString();
     final email = state.parameters['email']?.toString();
-    final gender = state.parameters['gender']?.toString() ?? 'Male';
+    final gender = state.parameters['gender']?.toString() ?? 'Female';
 
     final patient = PatientModel()
       ..name = name
@@ -208,8 +214,9 @@ class ActionExecutor {
       ..updatedAt = DateTime.now();
 
     final complaint = state.parameters['complaint']?.toString();
+    final duration = state.parameters['duration']?.toString();
     if (complaint != null && complaint.isNotEmpty) {
-      patient.notes = complaint;
+      patient.notes = duration != null ? '$complaint (duration: $duration)' : complaint;
     }
 
     await patientRepository.savePatient(patient);
@@ -217,14 +224,24 @@ class ActionExecutor {
     // Save initial vitals if provided during creation
     final systolic = (state.parameters['systolic'] as num?)?.toDouble();
     final diastolic = (state.parameters['diastolic'] as num?)?.toDouble();
-    if (systolic != null && diastolic != null) {
+    final temp = (state.parameters['bodyTemperature'] as num?)?.toDouble();
+    final pulse = (state.parameters['pulseRate'] as num?)?.toDouble();
+
+    if (systolic != null || diastolic != null || temp != null || pulse != null) {
       final initialRecord = VitalRecord()
         ..patientId = patient.id
-        ..systolic = systolic
-        ..diastolic = diastolic
+        ..systolic = systolic ?? 120
+        ..diastolic = diastolic ?? 80
+        ..pulseRate = pulse
+        ..bodyTemperature = bodyTemperatureInCelsius(temp, state.parameters['tempUnit'])
         ..dateTime = DateTime.now()
         ..updatedAt = DateTime.now();
       await vitalsRepository.saveVitalRecord(initialRecord);
+    }
+
+    // Auto-select newly registered patient
+    if (locator.isRegistered<PatientBloc>()) {
+      locator<PatientBloc>().add(PatientSelected(patient));
     }
 
     await activityRepository?.logActivity(
@@ -242,6 +259,54 @@ class ActionExecutor {
       summaryText: 'Successfully created patient profile for ${patient.name}.',
       actionType: AppActionType.createPatient,
       data: patient,
+    );
+  }
+
+  Future<ActionExecutionResult> _executeSwitchPatient(ConversationWorkflowState state) async {
+    final patientId = state.activePatient?.id ?? (state.parameters['patientId'] as int?);
+    if (patientId != null) {
+      final patient = await patientRepository.getPatientById(patientId);
+      if (patient != null) {
+        if (locator.isRegistered<PatientBloc>()) {
+          locator<PatientBloc>().add(PatientSelected(patient));
+        }
+        return ActionExecutionResult.success(
+          summaryText: 'Switched context to ${patient.name}.',
+          actionType: AppActionType.switchPatient,
+          data: patient,
+        );
+      }
+    }
+
+    final targetName = state.parameters['targetPatientName']?.toString() ??
+        state.parameters['patientName']?.toString();
+    if (targetName != null && targetName.isNotEmpty) {
+      final patients = await patientRepository.getPatients();
+      final match = patients
+          .where((p) => p.name.toLowerCase().contains(targetName.toLowerCase()))
+          .toList();
+      if (match.length == 1) {
+        final p = match.first;
+        if (locator.isRegistered<PatientBloc>()) {
+          locator<PatientBloc>().add(PatientSelected(p));
+        }
+        return ActionExecutionResult.success(
+          summaryText: 'Switched context to ${p.name}.',
+          actionType: AppActionType.switchPatient,
+          data: p,
+        );
+      } else if (match.isEmpty) {
+        return ActionExecutionResult.failure(
+          errorMessage: 'Patient "$targetName" was not found in your recorded patients.',
+          actionType: AppActionType.switchPatient,
+        );
+      }
+    }
+
+    return ActionExecutionResult.success(
+      summaryText: 'Please select a patient to switch to.',
+      actionType: AppActionType.switchPatient,
+      data: null,
     );
   }
 
@@ -592,6 +657,8 @@ class ActionExecutor {
         return AppActionType.compareVitals;
       case ConversationIntent.queryPatientHistory:
         return AppActionType.queryPatientHistory;
+      case ConversationIntent.switchPatient:
+        return AppActionType.switchPatient;
       case ConversationIntent.generalQuery:
         return AppActionType.generalQuery;
       default:
