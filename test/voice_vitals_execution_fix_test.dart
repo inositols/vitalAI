@@ -416,5 +416,85 @@ void main() {
       expect(state.status, equals(WorkflowStatus.awaitingSelection));
       expect(state.currentQuestion?.questionType, equals(GenUiQuestionType.patientSelection));
     });
+
+    test('Exact match "Patient A" does NOT match "New Patient" due to common word stopword filtering', () async {
+      final patientsWithCommonWord = [
+        PatientModel()
+          ..id = 10
+          ..remoteId = 'uuid-patient-a'
+          ..name = 'Patient A',
+        PatientModel()
+          ..id = 11
+          ..remoteId = 'uuid-new-patient'
+          ..name = 'New Patient',
+      ];
+      patientRepo.list.clear();
+      patientRepo.list.addAll(patientsWithCommonWord);
+
+      // 1. "switch to patient a" should match Patient A exclusively without ambiguity
+      final switchState = await orchestrator.handleUserUtterance(
+        "switch to patient a",
+        ConversationWorkflowState.idle(),
+        patientsWithCommonWord,
+      );
+
+      expect(switchState.intent, equals(ConversationIntent.switchPatient));
+      expect(switchState.activePatient?.name, equals('Patient A'));
+      expect(switchState.status, equals(WorkflowStatus.completed));
+      expect(switchState.candidatePatients, isEmpty);
+
+      // 2. "Summarise Patient A's patient history." with Patient A active should execute directly
+      final historyState = await orchestrator.handleUserUtterance(
+        "Summarise Patient A's patient history.",
+        ConversationWorkflowState.idle().copyWith(activePatient: patientsWithCommonWord.first),
+        patientsWithCommonWord,
+      );
+
+      expect(historyState.intent, equals(ConversationIntent.queryPatientHistory));
+      expect(historyState.status, equals(WorkflowStatus.completed));
+      expect(historyState.activePatient?.name, equals('Patient A'));
+      expect(historyState.candidatePatients, isEmpty);
+    });
+
+    test('Interactive patient selection understands "switch to patient a" and selects Patient A', () async {
+      final patients = [
+        PatientModel()
+          ..id = 10
+          ..remoteId = 'uuid-patient-a'
+          ..name = 'Patient A',
+        PatientModel()
+          ..id = 11
+          ..remoteId = 'uuid-new-patient'
+          ..name = 'New Patient',
+      ];
+      patientRepo.list.clear();
+      patientRepo.list.addAll(patients);
+
+      // Start in awaitingSelection with disambiguation
+      final initialQuestionState = ConversationWorkflowState.idle().copyWith(
+        status: WorkflowStatus.awaitingSelection,
+        intent: ConversationIntent.switchPatient,
+        candidatePatients: patients,
+        currentQuestion: questionResolver.resolveNextQuestion(
+          ConversationWorkflowState.idle().copyWith(
+            status: WorkflowStatus.awaitingSelection,
+            intent: ConversationIntent.switchPatient,
+            candidatePatients: patients,
+          ),
+          patients,
+        ),
+      );
+
+      // User responds by typing or saying "switch to patient a"
+      final nextState = await orchestrator.handleUserUtterance(
+        "switch to patient a",
+        initialQuestionState,
+        patients,
+      );
+
+      expect(nextState.status, equals(WorkflowStatus.completed));
+      expect(nextState.activePatient?.name, equals('Patient A'));
+      expect(nextState.validationErrors, isEmpty);
+    });
   });
 }

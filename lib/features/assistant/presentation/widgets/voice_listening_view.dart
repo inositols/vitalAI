@@ -80,11 +80,29 @@ class _VoiceListeningViewState extends State<VoiceListeningView>
             Container(
               width: 24,
               height: 24,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.subtleTealBorder,
+                  width: 1.0,
+                ),
               ),
-              child: const Icon(Icons.favorite, color: Colors.white, size: 14),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/vitalai_logo.png',
+                  width: 24,
+                  height: 24,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: AppColors.primary,
+                    child: const Icon(
+                      Icons.smart_toy_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Column(

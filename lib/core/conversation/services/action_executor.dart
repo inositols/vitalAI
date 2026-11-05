@@ -263,19 +263,31 @@ class ActionExecutor {
   }
 
   Future<ActionExecutionResult> _executeSwitchPatient(ConversationWorkflowState state) async {
-    final patientId = state.activePatient?.id ?? (state.parameters['patientId'] as int?);
-    if (patientId != null) {
-      final patient = await patientRepository.getPatientById(patientId);
-      if (patient != null) {
-        if (locator.isRegistered<PatientBloc>()) {
-          locator<PatientBloc>().add(PatientSelected(patient));
-        }
-        return ActionExecutionResult.success(
-          summaryText: 'Switched context to ${patient.name}.',
-          actionType: AppActionType.switchPatient,
-          data: patient,
-        );
+    final dynamic rawPid = state.activePatient?.id ?? state.parameters['patientId'];
+    final int? patientId = rawPid is int ? rawPid : int.tryParse(rawPid?.toString() ?? '');
+    PatientModel? patient;
+
+    if (patientId != null && patientId != 0) {
+      patient = await patientRepository.getPatientById(patientId);
+    }
+    if (patient == null && rawPid != null) {
+      final all = await patientRepository.getPatients();
+      final byRemote = all.where((p) => p.remoteId == rawPid.toString()).toList();
+      if (byRemote.isNotEmpty) patient = byRemote.first;
+    }
+    if (patient == null && state.activePatient != null) {
+      patient = state.activePatient;
+    }
+
+    if (patient != null) {
+      if (locator.isRegistered<PatientBloc>()) {
+        locator<PatientBloc>().add(PatientSelected(patient));
       }
+      return ActionExecutionResult.success(
+        summaryText: 'Switched context to ${patient.name}.',
+        actionType: AppActionType.switchPatient,
+        data: patient,
+      );
     }
 
     final targetName = state.parameters['targetPatientName']?.toString() ??
@@ -448,7 +460,8 @@ class ActionExecutor {
   }
 
   Future<ActionExecutionResult> _executeQueryHistory(ConversationWorkflowState state) async {
-    final patientId = state.activePatient?.id ?? (state.parameters['patientId'] as int);
+    final dynamic rawPid = state.activePatient?.id ?? state.parameters['patientId'];
+    final int patientId = rawPid is int ? rawPid : int.tryParse(rawPid?.toString() ?? '') ?? 0;
     final vitals = await vitalsRepository.getVitals(patientId);
     final notes = await patientRepository.getClinicalNotes(patientId);
 
@@ -460,8 +473,17 @@ class ActionExecutor {
   }
 
   Future<ActionExecutionResult> _executeOpenPatient(ConversationWorkflowState state) async {
-    final patientId = state.activePatient?.id ?? (state.parameters['patientId'] as int);
-    final patient = await patientRepository.getPatientById(patientId);
+    final dynamic rawPid = state.activePatient?.id ?? state.parameters['patientId'];
+    final int patientId = rawPid is int ? rawPid : int.tryParse(rawPid?.toString() ?? '') ?? 0;
+    PatientModel? patient;
+    if (patientId != 0) {
+      patient = await patientRepository.getPatientById(patientId);
+    }
+    if (patient == null && rawPid != null) {
+      final all = await patientRepository.getPatients();
+      final byRemote = all.where((p) => p.remoteId == rawPid.toString()).toList();
+      if (byRemote.isNotEmpty) patient = byRemote.first;
+    }
 
     if (patient == null) {
       return ActionExecutionResult.failure(

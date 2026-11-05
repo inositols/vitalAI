@@ -111,7 +111,11 @@ class ConversationOrchestrator {
     // If selecting a patient
     if (field == 'patientId') {
       final pid = value is int ? value : int.tryParse(value.toString()) ?? 0;
-      final matched = existingPatients.where((p) => p.id == pid).toList();
+      final valStr = value.toString().toLowerCase().trim();
+      final matched = existingPatients.where((p) =>
+          p.id == pid ||
+          (p.remoteId.isNotEmpty && p.remoteId.toLowerCase() == valStr) ||
+          p.name.toLowerCase() == valStr).toList();
       if (matched.isNotEmpty) {
         newActivePatient = matched.first;
         updatedParams['patientId'] = newActivePatient.id;
@@ -240,16 +244,117 @@ class ConversationOrchestrator {
         break;
 
       case GenUiQuestionType.patientSelection:
-        final matches = existingPatients
-            .where((p) => p.name.toLowerCase().contains(lower))
-            .toList();
-        if (matches.length == 1) {
-          parsedValue = matches.first.id;
-        } else if (matches.length > 1) {
-          return currentState.copyWith(
-            candidatePatients: matches,
-            status: WorkflowStatus.awaitingSelection,
-          );
+        // Strip common voice/intent prefixes
+        final cleaned = lower
+            .replaceFirst(RegExp(r'^(?:switch\s+to|switch\s+patient\s+to|select\s+patient|select|choose|work\s+on|go\s+to|pick|change\s+to|patient)\s+', caseSensitive: false), '')
+            .replaceAll(RegExp(r"'s\s+record.*$", caseSensitive: false), '')
+            .replaceAll(RegExp(r"'s\s+file.*$", caseSensitive: false), '')
+            .replaceAll(RegExp(r"\s+record.*$", caseSensitive: false), '')
+            .replaceAll(RegExp(r"[.?!]", caseSensitive: false), '')
+            .trim();
+
+        // 1. Check if user specified an index/ordinal (e.g. "1", "2", "option 1", "first", "second")
+        final numberMatch = RegExp(r'^(?:option\s+|#)?(\d+)$').firstMatch(cleaned);
+        if (numberMatch != null) {
+          final idx = int.tryParse(numberMatch.group(1)!) ?? -1;
+          final pool = currentState.candidatePatients.isNotEmpty
+              ? currentState.candidatePatients
+              : existingPatients;
+          if (idx >= 1 && idx <= pool.length) {
+            parsedValue = pool[idx - 1].id;
+            break;
+          }
+        }
+        if (cleaned == 'first' || cleaned == 'the first' || cleaned == '1st') {
+          final pool = currentState.candidatePatients.isNotEmpty
+              ? currentState.candidatePatients
+              : existingPatients;
+          if (pool.isNotEmpty) {
+            parsedValue = pool.first.id;
+            break;
+          }
+        } else if (cleaned == 'second' || cleaned == 'the second' || cleaned == '2nd') {
+          final pool = currentState.candidatePatients.isNotEmpty
+              ? currentState.candidatePatients
+              : existingPatients;
+          if (pool.length > 1) {
+            parsedValue = pool[1].id;
+            break;
+          }
+        }
+
+        // 2. Direct ID or remoteId match
+        final byId = existingPatients.where((p) =>
+            p.id.toString() == cleaned ||
+            (p.remoteId.isNotEmpty && (p.remoteId.toLowerCase() == cleaned || p.remoteId.toLowerCase().startsWith(cleaned)))).toList();
+        if (byId.length == 1) {
+          parsedValue = byId.first.id;
+          break;
+        }
+
+        // 3. Exact full name match on cleaned or lower
+        final exactMatches = existingPatients.where((p) {
+          final pName = p.name.toLowerCase();
+          return pName == cleaned ||
+              pName == lower ||
+              lower == "switch to $pName" ||
+              cleaned == pName;
+        }).toList();
+        if (exactMatches.isNotEmpty) {
+          parsedValue = exactMatches.first.id;
+          break;
+        }
+
+        // 4. Match using intentResolver.matchPatientInQuery
+        final target = cleaned.isNotEmpty ? cleaned : lower;
+        final nameMatches = intentResolver.matchPatientInQuery(
+          target,
+          existingPatients,
+          currentActivePatient: currentState.activePatient,
+        );
+        if (nameMatches.length == 1) {
+          parsedValue = nameMatches.first.id;
+        } else if (nameMatches.length > 1) {
+          final exact = nameMatches.where((p) => p.name.toLowerCase() == target).toList();
+          if (exact.length == 1) {
+            parsedValue = exact.first.id;
+          } else {
+            return currentState.copyWith(
+              candidatePatients: nameMatches,
+              status: WorkflowStatus.awaitingSelection,
+            );
+          }
+        } else {
+          // 5. Fallback substring matching
+          final partial = existingPatients.where((p) {
+            final pName = p.name.toLowerCase();
+            return pName.contains(target) || (target.length > 3 && target.contains(pName));
+          }).toList();
+          if (partial.length == 1) {
+            parsedValue = partial.first.id;
+          } else if (partial.length > 1) {
+            return currentState.copyWith(
+              candidatePatients: partial,
+              status: WorkflowStatus.awaitingSelection,
+            );
+          }
+        }
+        break;
+
+      case GenUiQuestionType.multiSelect:
+        final selected = <dynamic>[];
+        for (final opt in question.options) {
+          if (lower.contains(opt.label.toLowerCase()) ||
+              lower.contains(opt.value.toString().toLowerCase())) {
+            selected.add(opt.value);
+          }
+        }
+        if (selected.isNotEmpty) {
+          parsedValue = selected;
+        } else if (lower.contains('all') || lower.contains('everything')) {
+          parsedValue = question.options.map((o) => o.value).toList();
+        } else {
+          parsedValue = [utterance];
         }
         break;
 

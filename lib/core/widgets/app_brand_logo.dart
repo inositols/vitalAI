@@ -17,11 +17,19 @@ class AppBrandLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget emblem = CustomPaint(
-      size: Size(size, size),
-      painter: _VoiceVitalsLogoPainter(
-        color: AppColors.primary,
-        strokeColor: Colors.white,
+    Widget emblem = ClipOval(
+      child: Image.asset(
+        'assets/images/vitalai_logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => CustomPaint(
+          size: Size(size, size),
+          painter: _VoiceVitalsLogoPainter(
+            color: AppColors.primary,
+            strokeColor: Colors.white,
+          ),
+        ),
       ),
     );
 

@@ -1259,14 +1259,30 @@ class _AssistantPageState extends State<AssistantPage>
                             width: 28,
                             height: 28,
                             margin: const EdgeInsets.only(top: 2),
-                            decoration: const BoxDecoration(
-                              color: AppColors.primary,
+                            decoration: BoxDecoration(
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.darkBorder
+                                    : AppColors.subtleTealBorder,
+                                width: 1.0,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.favorite,
-                              color: Colors.white,
-                              size: 14,
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/vitalai_logo.png',
+                                width: 28,
+                                height: 28,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: AppColors.primary,
+                                  child: const Icon(
+                                    Icons.smart_toy_rounded,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),

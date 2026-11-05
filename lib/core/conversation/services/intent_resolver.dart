@@ -155,7 +155,11 @@ class IntentResolver {
 
     // 1. Resolve Patient Identity from utterance
     if (existingPatients != null && existingPatients.isNotEmpty) {
-      final nameMatches = _matchPatientInQuery(query, existingPatients);
+      final nameMatches = _matchPatientInQuery(
+        query,
+        existingPatients,
+        currentActivePatient: currentActivePatient,
+      );
       if (nameMatches.length == 1) {
         resolvedPatient = nameMatches.first;
         params['patientId'] = resolvedPatient.id;
@@ -205,7 +209,12 @@ class IntentResolver {
         break;
 
       case ConversationIntent.switchPatient:
-        _extractSwitchPatientSlots(query, params, existingPatients);
+        _extractSwitchPatientSlots(
+          query,
+          params,
+          existingPatients,
+          currentActivePatient: currentActivePatient,
+        );
         break;
 
       default:
@@ -219,24 +228,138 @@ class IntentResolver {
     );
   }
 
-  List<PatientModel> _matchPatientInQuery(String query, List<PatientModel> patients) {
-    final lower = query.toLowerCase();
-    final matches = <PatientModel>[];
+  List<PatientModel> _matchPatientInQuery(
+    String query,
+    List<PatientModel> patients, {
+    PatientModel? currentActivePatient,
+  }) =>
+      matchPatientInQuery(
+        query,
+        patients,
+        currentActivePatient: currentActivePatient,
+      );
+
+  /// Matches patients mentioned in the query with strict exact-match precedence and stopword filtering.
+  List<PatientModel> matchPatientInQuery(
+    String query,
+    List<PatientModel> patients, {
+    PatientModel? currentActivePatient,
+  }) {
+    final lower = query.toLowerCase().trim();
+    if (lower.isEmpty || patients.isEmpty) return [];
+
+    const genericStopwords = {
+      'patient',
+      'patients',
+      'new',
+      'user',
+      'record',
+      'records',
+      'history',
+      'vital',
+      'vitals',
+      'summary',
+      'summarise',
+      'summarize',
+      'test',
+      'dr',
+      'doctor',
+      'nurse',
+      'mr',
+      'mrs',
+      'ms',
+      'miss',
+      'male',
+      'female',
+      'adult',
+      'child',
+      'profile',
+      'info',
+      'information',
+      'active',
+      'current',
+      'view',
+      'show',
+      'open',
+      'check',
+      'switch',
+      'select',
+      'choose',
+      'data',
+      'chart',
+      'details',
+      'latest',
+    };
+
+    final exactMatches = <PatientModel>[];
+    final partialMatches = <PatientModel>[];
 
     for (final p in patients) {
-      final fullName = p.name.toLowerCase();
-      final firstName = fullName.split(' ').first;
-      final lastName = fullName.split(' ').length > 1 ? fullName.split(' ').last : '';
+      final fullName = p.name.toLowerCase().trim();
+      if (fullName.isEmpty) continue;
 
-      if (lower.contains(fullName) ||
-          lower.contains("$fullName's") ||
-          (firstName.length > 2 && (lower.contains(firstName) || lower.contains("$firstName's"))) ||
-          (lastName.length > 2 && (lower.contains(lastName) || lower.contains("$lastName's")))) {
-        matches.add(p);
+      // 1. Exact full-name match in the query (with boundary or possessive or punctuation)
+      final escapedFullName = RegExp.escape(fullName);
+      final exactRegex = RegExp(
+        '(?:^|\\b|\\s)$escapedFullName(?:\'s|s|\\b|\\s|\$)',
+        caseSensitive: false,
+      );
+
+      if (exactRegex.hasMatch(lower) || lower == fullName || lower.contains("$fullName's")) {
+        exactMatches.add(p);
+        continue;
+      }
+
+      // 2. Partial name match (first name / last name)
+      // Disallow generic clinical stopwords from acting as partial name identifiers!
+      final parts = fullName.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+      final firstName = parts.isNotEmpty ? parts.first : '';
+      final lastName = parts.length > 1 ? parts.last : '';
+
+      bool matchedPartial = false;
+
+      if (firstName.length > 2 && !genericStopwords.contains(firstName)) {
+        final escapedFirst = RegExp.escape(firstName);
+        final firstRegex = RegExp('(?:^|\\b|\\s)$escapedFirst(?:\'s|s|\\b|\\s|\$)', caseSensitive: false);
+        if (firstRegex.hasMatch(lower)) {
+          matchedPartial = true;
+        }
+      }
+
+      if (!matchedPartial && lastName.length > 2 && !genericStopwords.contains(lastName)) {
+        final escapedLast = RegExp.escape(lastName);
+        final lastRegex = RegExp('(?:^|\\b|\\s)$escapedLast(?:\'s|s|\\b|\\s|\$)', caseSensitive: false);
+        if (lastRegex.hasMatch(lower)) {
+          matchedPartial = true;
+        }
+      }
+
+      if (matchedPartial) {
+        partialMatches.add(p);
       }
     }
 
-    return matches;
+    // STRICT PRECEDENCE RULE:
+    // If there is any exact full-name match, partial single-word matches are discarded!
+    if (exactMatches.isNotEmpty) {
+      // If the current active patient is among the exact matches, prefer it
+      if (currentActivePatient != null &&
+          exactMatches.any((p) => p.id == currentActivePatient.id || (p.remoteId.isNotEmpty && p.remoteId == currentActivePatient.remoteId))) {
+        return [currentActivePatient];
+      }
+      return exactMatches;
+    }
+
+    // If no exact match, check partial matches
+    if (partialMatches.isNotEmpty) {
+      if (currentActivePatient != null &&
+          partialMatches.any((p) => p.id == currentActivePatient.id || (p.remoteId.isNotEmpty && p.remoteId == currentActivePatient.remoteId))) {
+        return [currentActivePatient];
+      }
+      return partialMatches;
+    }
+
+    return [];
   }
 
   void _extractVitalsSlots(String query, Map<String, dynamic> params) {
@@ -310,8 +433,9 @@ class IntentResolver {
   void _extractSwitchPatientSlots(
     String query,
     Map<String, dynamic> params,
-    List<PatientModel>? existingPatients,
-  ) {
+    List<PatientModel>? existingPatients, {
+    PatientModel? currentActivePatient,
+  }) {
     final lower = query.toLowerCase().trim();
     String target = lower
         .replaceFirst(RegExp(r"^switch\s+to\s+", caseSensitive: false), '')
@@ -331,7 +455,11 @@ class IntentResolver {
     if (target.isNotEmpty && target != 'patient' && target != 'patients') {
       params['targetPatientName'] = target;
       if (existingPatients != null && existingPatients.isNotEmpty) {
-        final matches = _matchPatientInQuery(target, existingPatients);
+        final matches = _matchPatientInQuery(
+          target,
+          existingPatients,
+          currentActivePatient: currentActivePatient,
+        );
         if (matches.length == 1) {
           params['patientId'] = matches.first.id;
           params['patientName'] = matches.first.name;
@@ -500,6 +628,13 @@ class IntentResolver {
     if (lower.contains('notes') || lower.contains('soap')) categories.add('notes');
     if (lower.contains('visits') || lower.contains('encounters')) categories.add('visits');
     if (lower.contains('meds') || lower.contains('medications')) categories.add('medications');
+
+    // If the user requested a summary or complete history, prefill all categories
+    if (categories.isEmpty &&
+        (lower.contains('summar') || lower.contains('complete history'))) {
+      categories.addAll(['vitals', 'notes', 'visits', 'medications']);
+    }
+
     if (categories.isNotEmpty) {
       params['categories'] = categories;
     }
