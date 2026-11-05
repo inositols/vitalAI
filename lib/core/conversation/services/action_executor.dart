@@ -9,6 +9,10 @@ import '../../../../features/reminders/domain/repositories/reminder_repository.d
 import '../../../../features/vitals/data/models/vital_record.dart';
 import '../../../../features/vitals/domain/repositories/vitals_repository.dart';
 import '../../di/injection.dart';
+import '../../database/db_service.dart';
+import '../../services/clinical_data_seeder.dart';
+import '../../../../features/patients/presentation/bloc/patient_bloc.dart';
+import '../../../../features/patients/presentation/bloc/patient_event.dart';
 import '../../../../features/settings/presentation/bloc/settings_bloc.dart';
 import '../../../../features/settings/presentation/bloc/settings_event.dart';
 import '../../services/ai_service.dart';
@@ -203,7 +207,25 @@ class ActionExecutor {
       ..emergencyContact = phone ?? ''
       ..updatedAt = DateTime.now();
 
+    final complaint = state.parameters['complaint']?.toString();
+    if (complaint != null && complaint.isNotEmpty) {
+      patient.notes = complaint;
+    }
+
     await patientRepository.savePatient(patient);
+
+    // Save initial vitals if provided during creation
+    final systolic = (state.parameters['systolic'] as num?)?.toDouble();
+    final diastolic = (state.parameters['diastolic'] as num?)?.toDouble();
+    if (systolic != null && diastolic != null) {
+      final initialRecord = VitalRecord()
+        ..patientId = patient.id
+        ..systolic = systolic
+        ..diastolic = diastolic
+        ..dateTime = DateTime.now()
+        ..updatedAt = DateTime.now();
+      await vitalsRepository.saveVitalRecord(initialRecord);
+    }
 
     await activityRepository?.logActivity(
       ActivityItem(
@@ -409,6 +431,54 @@ class ActionExecutor {
             "✓ AI Data Sharing has been successfully enabled! Live Gemini AI clinical insights and assistant features are now active.",
         actionType: AppActionType.generalQuery,
         data: "ai_consent_enabled",
+      );
+    }
+
+    // 0b. Remove unadded demo patients command
+    if (lower.contains('remove all patients') ||
+        lower.contains('clear demo') ||
+        lower.contains('delete demo') ||
+        lower.contains('remove demo') ||
+        lower.contains('patients i didn\'t add') ||
+        lower.contains('patients i didnt add') ||
+        lower.contains('remove default patients') ||
+        lower.contains('delete all patients')) {
+      if (locator.isRegistered<DbService>()) {
+        await ClinicalDataSeeder.purgeDemoPatients(locator<DbService>());
+      }
+      if (locator.isRegistered<PatientBloc>()) {
+        locator<PatientBloc>().add(PatientListRequested());
+      }
+      return ActionExecutionResult.success(
+        summaryText:
+            "✓ All pre-seeded demo patients and sample records have been removed. Your patient list is now completely clean, and you can add your own patients through chat.",
+        actionType: AppActionType.generalQuery,
+        data: "purged_demo_patients",
+      );
+    }
+
+    // 0c. List all patients query
+    if (lower == 'show my patients' ||
+        lower == 'list patients' ||
+        lower == 'view patients' ||
+        lower == 'show patients' ||
+        lower == 'all patients' ||
+        lower == 'my patients' ||
+        lower.contains('how many patients')) {
+      final allPatients = await patientRepository.getPatients();
+      if (allPatients.isEmpty) {
+        return ActionExecutionResult.success(
+          summaryText:
+              "You don't have any patients in your records yet. Would you like to add a new patient now? Simply tell me their details, e.g. 'Add Chika Okafor, 28 years old.'",
+          actionType: AppActionType.generalQuery,
+          data: allPatients,
+        );
+      }
+      return ActionExecutionResult.success(
+        summaryText:
+            "You currently have ${allPatients.length} patient${allPatients.length == 1 ? '' : 's'} recorded:",
+        actionType: AppActionType.generalQuery,
+        data: allPatients,
       );
     }
 

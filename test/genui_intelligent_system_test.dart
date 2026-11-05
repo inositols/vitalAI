@@ -5,8 +5,13 @@ import 'package:vitalai/core/conversation/models/conversation_workflow_state.dar
 import 'package:vitalai/core/conversation/services/action_executor.dart';
 import 'package:vitalai/core/genui/genui.dart';
 import 'package:vitalai/core/services/ai_service.dart';
+import 'package:vitalai/core/services/clinical_data_seeder.dart';
+import 'package:vitalai/core/database/db_service.dart';
 import 'package:vitalai/features/patients/data/models/patient_model.dart';
 import 'package:vitalai/features/patients/domain/repositories/patient_repository.dart';
+import 'package:vitalai/features/patients/presentation/bloc/patient_bloc.dart';
+import 'package:vitalai/features/patients/presentation/bloc/patient_event.dart';
+import 'package:vitalai/features/patients/presentation/bloc/patient_state.dart';
 import 'package:vitalai/features/reminders/domain/repositories/reminder_repository.dart';
 import 'package:vitalai/features/vitals/data/models/vital_record.dart';
 import 'package:vitalai/features/vitals/domain/repositories/vitals_repository.dart';
@@ -907,7 +912,107 @@ Please monitor daily.
       expect(emergencyResponse, contains('911'));
       expect(emergencyResponse.toLowerCase(), isNot(contains('consent required')));
     });
+
+    test('PatientBloc emits empty list when repository is empty and does not synthesize dummy User patient', () async {
+      final patientRepo = _MockPatientRepository([]);
+      final bloc = PatientBloc(patientRepository: patientRepo);
+
+      bloc.add(PatientListRequested());
+      await pumpEventQueue();
+
+      expect(bloc.state, isA<PatientLoadSuccess>());
+      final success = bloc.state as PatientLoadSuccess;
+      expect(success.patients, isEmpty);
+      expect(success.activePatient, isNull);
+    });
+
+    test('ActionExecutor handles conversational command to remove unadded demo patients', () async {
+      final patientRepo = _MockPatientRepository([]);
+      final vitalsRepo = _MockVitalsRepository();
+      final reminderRepo = _MockReminderRepository();
+      final executor = ActionExecutor(
+        patientRepository: patientRepo,
+        vitalsRepository: vitalsRepo,
+        reminderRepository: reminderRepo,
+      );
+
+      final purgeState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: "Remove all patients I didn't add myself",
+      );
+
+      final result = await executor.executeWorkflowAction(purgeState);
+      expect(result.isSuccess, isTrue);
+      expect(result.summaryText, contains('All pre-seeded demo patients and sample records have been removed'));
+
+      final listState = ConversationWorkflowState.idle().copyWith(
+        intent: ConversationIntent.generalQuery,
+        lastUserUtterance: "Show my patients",
+      );
+
+      final listResult = await executor.executeWorkflowAction(listState);
+      expect(listResult.isSuccess, isTrue);
+      expect(listResult.summaryText, contains("You don't have any patients in your records yet"));
+    });
+
+    test('ClinicalDataSeeder.purgeDemoPatients removes seeded demo patients while preserving user-added patients', () async {
+      final mockDb = _MockDbService();
+      final userPatient = PatientModel()
+        ..id = 42
+        ..remoteId = 'USER-999'
+        ..name = 'Self Added Patient'
+        ..dateOfBirth = DateTime(1995, 1, 1);
+
+      await mockDb.savePatients([
+        PatientModel()
+          ..id = 1
+          ..remoteId = 'CV-10024'
+          ..name = 'Chika Okafor',
+        PatientModel()
+          ..id = 2
+          ..remoteId = 'CV-10025'
+          ..name = 'Emeka Nwosu',
+        userPatient,
+      ]);
+
+      await ClinicalDataSeeder.purgeDemoPatients(mockDb);
+
+      final remaining = await mockDb.getPatients();
+      expect(remaining.length, equals(1));
+      expect(remaining.first.id, equals(42));
+      expect(remaining.first.name, equals('Self Added Patient'));
+    });
   });
+}
+
+class _MockDbService implements DbService {
+  List<PatientModel> _patients = [];
+  List<VitalRecord> _vitals = [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
+  Future<List<PatientModel>> getPatients() async => _patients;
+
+  @override
+  Future<void> savePatients(List<PatientModel> patients) async {
+    _patients = List.from(patients);
+  }
+
+  @override
+  Future<List<VitalRecord>> getVitals() async => _vitals;
+
+  @override
+  Future<void> saveVitals(List<VitalRecord> vitals) async {
+    _vitals = List.from(vitals);
+  }
+
+  @override
+  Future<void> saveClinicalNotes(int patientId, dynamic notes) async {}
+
+  @override
+  Future<void> clearConversations(int patientId) async {}
 }
 
 class _MockPatientRepository implements PatientRepository {

@@ -249,8 +249,8 @@ Future<void> setupLocator() async {
     ),
   );
 
-  // 15. Initialize Database and Seed Default Clinical Records
+  // 15. Initialize Database and purge any pre-seeded demo records
   await dbService.init();
-  await ClinicalDataSeeder.seedDefaultClinicalData(dbService);
+  await ClinicalDataSeeder.purgeDemoPatients(dbService);
 }
 

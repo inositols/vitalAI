@@ -78,13 +78,36 @@ class _AssistantPageState extends State<AssistantPage>
       PatientCreationService();
   PatientDraft? _activePatientDraft;
 
-  final List<String> _suggestedPrompts = [
-    'Show me my patients with high blood pressure.',
-    "Open Chika's latest vitals.",
-    'Draft a note for my current visit.',
-    'Create a new patient.',
-    "Compare Chika's blood pressure from last week to this week.",
-  ];
+  List<String> get _suggestedPrompts {
+    final patient = _getActivePatient();
+    if (patient != null && patient.name.trim().isNotEmpty) {
+      final name = patient.name.trim();
+      return [
+        "Open $name's latest vitals.",
+        "Compare $name's blood pressure from last week to this week.",
+        "Record new vitals for $name.",
+        'Show me my patients with high blood pressure.',
+        'Create a new patient.',
+      ];
+    }
+    return [
+      'Create a new patient.',
+      'Show my patients.',
+      'What are normal vital signs ranges?',
+      'Show patients with high blood pressure.',
+      'Draft a note for my current visit.',
+    ];
+  }
+
+  PatientModel? _getActivePatient() {
+    try {
+      final patientBloc = context.read<PatientBloc>();
+      if (patientBloc.state is PatientLoadSuccess) {
+        return (patientBloc.state as PatientLoadSuccess).activePatient;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   void initState() {
@@ -353,7 +376,9 @@ class _AssistantPageState extends State<AssistantPage>
           break;
 
         case ConversationIntent.compareVitals:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
           responseText =
               "Here's $name's blood pressure trend for the last 7 days, compared to the previous 7 days.";
           resultWidget = ClinicalComparisonChartCard(
@@ -364,14 +389,18 @@ class _AssistantPageState extends State<AssistantPage>
           break;
 
         case ConversationIntent.queryPatientHistory:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
           responseText = "Here is the clinical history summary for $name:";
           resultWidget = _buildGenUiRecentActivity();
           break;
 
         case ConversationIntent.openPatientDetails:
         case ConversationIntent.findPatient:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
           responseText = "Opening clinical profile and chart for $name:";
           resultWidget = _buildGenUiPatientList();
           break;
@@ -475,25 +504,35 @@ class _AssistantPageState extends State<AssistantPage>
   void _handleGenUiAction(GenUiAction action) {
     switch (action.type) {
       case GenUiActionType.compareVitals:
-        final name = action.payload['patientName'] ?? 'Chika Okafor';
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
         _processTranscript(
           "Compare $name's blood pressure from last week to this week.",
         );
         break;
       case GenUiActionType.viewVitalHistory:
-        final name = action.payload['patientName'] ?? 'Chika';
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
         _processTranscript("Show $name's vital signs.");
         break;
       case GenUiActionType.generateSummary:
-        final name = action.payload['patientName'] ?? 'Chika';
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
         _processTranscript("Summarise $name's patient history.");
         break;
       case GenUiActionType.recordVitals:
-        final name = action.payload['patientName'] ?? 'Chika';
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
         _processTranscript("Record a new blood pressure reading for $name.");
         break;
       case GenUiActionType.viewPatient:
-        final name = action.payload['patientName'] ?? 'Chika';
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
         _processTranscript("Open $name's latest vitals.");
         break;
       case GenUiActionType.confirmSave:

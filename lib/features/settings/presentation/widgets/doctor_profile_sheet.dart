@@ -261,8 +261,8 @@ class _DoctorProfileSheetState extends State<DoctorProfileSheet> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Reset Demo Clinical Records'),
+                      : const Icon(Icons.delete_sweep_outlined, size: 18),
+                  label: const Text('Clear Demo Patients (Start Fresh)'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primary,
                     side: const BorderSide(color: AppColors.primary),
@@ -277,8 +277,7 @@ class _DoctorProfileSheetState extends State<DoctorProfileSheet> {
                           final navigator = Navigator.of(context);
                           final messenger = ScaffoldMessenger.of(context);
                           final dbService = locator<DbService>();
-                          await dbService.clearAll();
-                          await ClinicalDataSeeder.seedDefaultClinicalData(dbService);
+                          await ClinicalDataSeeder.purgeDemoPatients(dbService);
                           patientBloc.add(PatientListRequested());
                           if (mounted) {
                             setState(() => _isResetting = false);
@@ -286,7 +285,7 @@ class _DoctorProfileSheetState extends State<DoctorProfileSheet> {
                           navigator.pop();
                           messenger.showSnackBar(
                             const SnackBar(
-                              content: Text('Demo clinical dataset reloaded successfully.'),
+                              content: Text('All demo patients removed. You can now add your own patients through chat.'),
                               backgroundColor: AppColors.primary,
                             ),
                           );

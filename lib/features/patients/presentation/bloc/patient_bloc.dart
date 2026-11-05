@@ -27,28 +27,14 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
       PatientListRequested event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      var patients = await patientRepository.getPatients();
-      if (patients.isEmpty) {
-        final user = authRepository?.currentUser;
-        String profileName = 'User';
-        if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
-          profileName = user.displayName!.trim();
-        } else if (user?.email != null && user!.email!.contains('@')) {
-          profileName = user.email!.split('@')[0];
-        }
-        final initialPatient = PatientModel()
-          ..name = profileName
-          ..medicalConditions = []
-          ..allergies = []
-          ..medications = [];
-        await patientRepository.savePatient(initialPatient);
-        patients = await patientRepository.getPatients();
-      }
+      final patients = await patientRepository.getPatients();
 
-      // Auto-select first patient if none selected, or refresh active patient
-      if (_activePatient == null && patients.isNotEmpty) {
+      // Refresh active patient if patients exist, otherwise null
+      if (patients.isEmpty) {
+        _activePatient = null;
+      } else if (_activePatient == null) {
         _activePatient = patients.first;
-      } else if (_activePatient != null && patients.isNotEmpty) {
+      } else {
         _activePatient = patients.firstWhere(
           (p) => p.id == _activePatient!.id,
           orElse: () => patients.first,

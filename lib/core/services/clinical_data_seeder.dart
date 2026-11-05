@@ -7,6 +7,51 @@ import 'package:vitalai/core/database/db_service.dart';
 /// Seeds realistic clinical demo data for healthcare providers.
 /// Matches the VoiceVitals UI specifications.
 class ClinicalDataSeeder {
+  /// Purges all pre-seeded demo clinical data from the database.
+  /// Leaves only user-added patients, or leaves the database completely clean.
+  static Future<void> purgeDemoPatients(DbService dbService) async {
+    final patients = await dbService.getPatients();
+    const demoRemoteIds = {
+      'CV-10024',
+      'CV-10025',
+      'CV-10026',
+      'CV-10027',
+      'CV-10028',
+    };
+    const demoNames = {
+      'chika okafor',
+      'emeka nwosu',
+      'ngozi eze',
+      'tunde bello',
+      'chinelo obi',
+      'user',
+    };
+
+    final demoIds = <int>{};
+    for (final p in patients) {
+      final nameLower = p.name.trim().toLowerCase();
+      if (demoRemoteIds.contains(p.remoteId) ||
+          demoNames.contains(nameLower) ||
+          p.remoteId.startsWith('CV-1002')) {
+        demoIds.add(p.id);
+      }
+    }
+
+    final remainingPatients = patients.where((p) => !demoIds.contains(p.id)).toList();
+    await dbService.savePatients(remainingPatients);
+
+    // Remove vitals for purged demo patients
+    final vitals = await dbService.getVitals();
+    final remainingVitals = vitals.where((v) => !demoIds.contains(v.patientId)).toList();
+    await dbService.saveVitals(remainingVitals);
+
+    // Remove clinical notes and conversations for purged demo patients
+    for (final id in demoIds) {
+      await dbService.saveClinicalNotes(id, []);
+      await dbService.clearConversations(id);
+    }
+  }
+
   static Future<void> seedDefaultClinicalData(DbService dbService) async {
     final existingPatients = await dbService.getPatients();
     if (existingPatients.isNotEmpty) return;
