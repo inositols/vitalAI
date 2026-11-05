@@ -9,6 +9,21 @@ class IntentResolver {
   ConversationIntent classify(String query) {
     final lower = query.toLowerCase().trim();
 
+    // 0. Patient switching / Context selection
+    if (lower.startsWith('switch to ') ||
+        lower.startsWith("let's work on ") ||
+        lower.startsWith('lets work on ') ||
+        lower.startsWith('work on ') ||
+        lower.startsWith('select patient ') ||
+        lower.startsWith('go back to ') ||
+        lower == 'switch patient' ||
+        lower == 'switch patients' ||
+        lower == 'change patient' ||
+        lower.startsWith('switch patient to ') ||
+        lower.startsWith('change patient to ')) {
+      return ConversationIntent.switchPatient;
+    }
+
     // 1. Patient creation
     if (lower.contains('create a new patient') ||
         lower.contains('create patient') ||
@@ -19,7 +34,9 @@ class IntentResolver {
         lower.contains('register patient') ||
         lower.contains('start creating a patient') ||
         lower.contains('record for someone i just saw') ||
+        lower.startsWith('new patient ') ||
         (lower.startsWith('add ') && lower.contains('patient')) ||
+        (lower.startsWith('register ') && !lower.contains('appointment')) ||
         (lower.startsWith('create ') &&
             !lower.contains('note') &&
             !lower.contains('chart') &&
@@ -187,6 +204,10 @@ class IntentResolver {
         _extractUpdatePatientSlots(query, params);
         break;
 
+      case ConversationIntent.switchPatient:
+        _extractSwitchPatientSlots(query, params, existingPatients);
+        break;
+
       default:
         break;
     }
@@ -286,42 +307,123 @@ class IntentResolver {
     }
   }
 
+  void _extractSwitchPatientSlots(
+    String query,
+    Map<String, dynamic> params,
+    List<PatientModel>? existingPatients,
+  ) {
+    final lower = query.toLowerCase().trim();
+    String target = lower
+        .replaceFirst(RegExp(r"^switch\s+to\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^let'?s\s+work\s+on\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^lets\s+work\s+on\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^work\s+on\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^select\s+patient\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^go\s+back\s+to\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^switch\s+patient\s+to\s+", caseSensitive: false), '')
+        .replaceFirst(RegExp(r"^change\s+patient\s+to\s+", caseSensitive: false), '')
+        .replaceAll(RegExp(r"'s\s+record.*$", caseSensitive: false), '')
+        .replaceAll(RegExp(r"'s\s+file.*$", caseSensitive: false), '')
+        .replaceAll(RegExp(r"\s+record.*$", caseSensitive: false), '')
+        .replaceAll(RegExp(r"[.?!]", caseSensitive: false), '')
+        .trim();
+
+    if (target.isNotEmpty && target != 'patient' && target != 'patients') {
+      params['targetPatientName'] = target;
+      if (existingPatients != null && existingPatients.isNotEmpty) {
+        final matches = _matchPatientInQuery(target, existingPatients);
+        if (matches.length == 1) {
+          params['patientId'] = matches.first.id;
+          params['patientName'] = matches.first.name;
+        } else if (matches.length > 1) {
+          params['isPatientAmbiguous'] = true;
+        }
+      }
+    }
+  }
+
   void _extractPatientCreationSlots(String query, Map<String, dynamic> params) {
     final lower = query.toLowerCase();
 
-    // Name extraction
-    final namePattern = RegExp(r'(?:patient|named|create|register|add)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)');
-    final nameMatch = namePattern.firstMatch(query);
-    if (nameMatch != null) {
-      params['name'] = nameMatch.group(1)!.trim();
+    // 1. Name extraction
+    // Look for explicit markers like "called <Name>", "named <Name>", "patient <Name>", or "add/create <Name>"
+    final nameLookahead = r'(?=\.|\,|\s+(?:she|he|who|aged|age|is|with|phone|email|dob|born|\d)|$)';
+    final calledMatch = RegExp(r'(?:called|named)\s+([A-Za-z]+(?:\s+[A-Za-z]+)+?)' + nameLookahead, caseSensitive: false).firstMatch(query);
+    final patientMatch = RegExp(r'(?:patient)\s+(?:called\s+|named\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)+?)' + nameLookahead, caseSensitive: false).firstMatch(query);
+    final createMatch = RegExp(r'(?:create|register|add)\s+(?:a\s+)?(?:new\s+)?(?:patient\s+)?(?:called\s+|named\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)+?)' + nameLookahead, caseSensitive: false).firstMatch(query);
+    final directNameMatch = RegExp(r'(?:named|called)\s+([A-Za-z]+(?:\s+[A-Za-z]+)+)', caseSensitive: false).firstMatch(query);
+
+    final rawName = calledMatch?.group(1) ?? patientMatch?.group(1) ?? createMatch?.group(1) ?? directNameMatch?.group(1);
+    if (rawName != null && rawName.trim().length >= 2) {
+      // Capitalize name to title case
+      params['name'] = rawName.trim().split(RegExp(r'\s+')).map((w) {
+        if (w.isEmpty) return '';
+        return w[0].toUpperCase() + w.substring(1).toLowerCase();
+      }).join(' ');
     }
 
-    // Email
+    // 2. Age extraction: "28 years old", "28 yo", "aged 28", "age 28", "is 28"
+    final ageRegex = RegExp(
+      r'(?:is|aged|age|she is|he is)?\s*(\d{1,3})\s*(?:years?\s*old|yo|age\b)',
+      caseSensitive: false,
+    );
+    final ageMatch = ageRegex.firstMatch(query);
+    if (ageMatch != null) {
+      final parsedAge = int.tryParse(ageMatch.group(1)!);
+      if (parsedAge != null && parsedAge > 0 && parsedAge < 130) {
+        params['age'] = parsedAge;
+        params['dateOfBirth'] = DateTime(DateTime.now().year - parsedAge, 1, 1);
+      }
+    }
+
+    // 3. Date of birth (explicit date format if present)
+    final dob = _parseDate(query);
+    if (dob != null) {
+      params['dateOfBirth'] = dob;
+    }
+
+    // 4. Biological sex
+    if (RegExp(r'\b(?:she|her|female|woman|girl)\b', caseSensitive: false).hasMatch(query)) {
+      params['gender'] = 'Female';
+    } else if (RegExp(r'\b(?:he|him|his|male|man|boy)\b', caseSensitive: false).hasMatch(query)) {
+      params['gender'] = 'Male';
+    }
+
+    // 5. Presenting complaint & symptom duration
+    final complaintRegex = RegExp(
+      r'(?:complaining of|complaint of|came in with|presented with|suffering from)\s+([^.]+)',
+      caseSensitive: false,
+    );
+    final complaintMatch = complaintRegex.firstMatch(query);
+    if (complaintMatch != null) {
+      params['complaint'] = complaintMatch.group(1)!.trim();
+    }
+
+    final durationRegex = RegExp(
+      r'(?:lasted|for|duration of)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(days?|weeks?|months?|hours?)',
+      caseSensitive: false,
+    );
+    final durationMatch = durationRegex.firstMatch(query);
+    if (durationMatch != null) {
+      params['duration'] = durationMatch.group(0)!.trim();
+    }
+
+    // 6. Email
     final emailRegex = RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}');
     final emailMatch = emailRegex.firstMatch(query);
     if (emailMatch != null) {
       params['email'] = emailMatch.group(0);
     }
 
-    // Phone
+    // 7. Phone
     final phoneRegex = RegExp(r'(?:phone(?:\s*number)?(?:\s*is)?\s*)?(\+?[0-9][0-9\s-]{7,15}[0-9])', caseSensitive: false);
     final phoneMatch = phoneRegex.firstMatch(query);
     if (phoneMatch != null) {
       params['phone'] = phoneMatch.group(1)!.replaceAll(RegExp(r'[\s-]'), '');
     }
 
-    // Biological sex
-    if (lower.contains(' female') || lower.contains('woman') || lower.contains('girl')) {
-      params['gender'] = 'Female';
-    } else if (lower.contains(' male') || lower.contains(' man ') || lower.contains('boy')) {
-      params['gender'] = 'Male';
-    }
-
-    // Date of birth
-    final dob = _parseDate(query);
-    if (dob != null) {
-      params['dateOfBirth'] = dob;
-    }
+    // 8. Embedded Vitals (e.g. BP 118/76, temperature 37.2)
+    _extractVitalsSlots(query, params);
   }
 
   void _extractClinicalNoteSlots(String query, Map<String, dynamic> params) {

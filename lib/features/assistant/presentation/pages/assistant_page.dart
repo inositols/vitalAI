@@ -31,12 +31,22 @@ import '../../../../core/conversation/models/conversation_workflow_state.dart';
 import '../../../../core/conversation/models/workflow_status.dart';
 import '../../../../core/conversation/widgets/adaptive_genui_follow_up_card.dart';
 import '../../../vitals/data/models/vital_record.dart';
+import '../../../../core/genui/models/genui_action.dart';
+import '../../../../core/genui/models/genui_component.dart';
+import '../../../../core/genui/components/suggestion_card.dart';
+import '../../../../core/genui/services/suggestion_service.dart';
+import '../../../settings/presentation/bloc/settings_bloc.dart';
+import '../../../settings/presentation/bloc/settings_event.dart';
 
 enum AssistantUiState {
   idle,
   listening,
+  stopping,
+  transcribing,
   processing,
+  awaitingInteraction,
   responding,
+  completed,
   error,
   permissionRequired,
 }
@@ -48,7 +58,8 @@ class AssistantPage extends StatefulWidget {
   State<AssistantPage> createState() => _AssistantPageState();
 }
 
-class _AssistantPageState extends State<AssistantPage> with SingleTickerProviderStateMixin {
+class _AssistantPageState extends State<AssistantPage>
+    with SingleTickerProviderStateMixin {
   AssistantUiState _uiState = AssistantUiState.idle;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -57,9 +68,20 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   stt.SpeechToText? _speech;
   bool _speechAvailable = false;
   String _currentTranscript = '';
+  Timer? _silenceTimer;
 
-  // Conversational state
-  final List<Map<String, dynamic>> _messages = [];
+  // Conversational state per patient
+  final Map<int, List<Map<String, dynamic>>> _patientConversations = {};
+  final List<Map<String, dynamic>> _generalConversations = [];
+
+  List<Map<String, dynamic>> get _messages {
+    final patient = _getActivePatient();
+    if (patient != null) {
+      return _patientConversations.putIfAbsent(patient.id, () => []);
+    }
+    return _generalConversations;
+  }
+
   bool _isTtsPlaying = false;
 
   // Universal Conversational Workflow BLoC
@@ -67,22 +89,48 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   StreamSubscription<ConversationWorkflowState>? _workflowSubscription;
 
   // Conversational patient creation
-  final PatientCreationService _patientCreationService = PatientCreationService();
+  final PatientCreationService _patientCreationService =
+      PatientCreationService();
   PatientDraft? _activePatientDraft;
 
-  final List<String> _suggestedPrompts = [
-    'Show me my patients with high blood pressure.',
-    "Open Chika's latest vitals.",
-    'Draft a note for my current visit.',
-    'Create a new patient.',
-    "Compare Chika's blood pressure from last week to this week.",
-  ];
+  List<String> get _suggestedPrompts {
+    final patient = _getActivePatient();
+    if (patient != null && patient.name.trim().isNotEmpty) {
+      final name = patient.name.trim();
+      return [
+        "Open $name's latest vitals.",
+        "Compare $name's blood pressure from last week to this week.",
+        "Record new vitals for $name.",
+        'Show me my patients with high blood pressure.',
+        'Create a new patient.',
+      ];
+    }
+    return [
+      'Create a new patient.',
+      'Show my patients.',
+      'What are normal vital signs ranges?',
+      'Show patients with high blood pressure.',
+      'Draft a note for my current visit.',
+    ];
+  }
+
+  PatientModel? _getActivePatient() {
+    try {
+      final patientBloc = context.read<PatientBloc>();
+      if (patientBloc.state is PatientLoadSuccess) {
+        return (patientBloc.state as PatientLoadSuccess).activePatient;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
     _workflowBloc = locator<ConversationWorkflowBloc>();
-    _workflowSubscription = _workflowBloc.stream.listen(_handleWorkflowStateChange);
+    _workflowSubscription = _workflowBloc.stream.listen(
+      _handleWorkflowStateChange,
+    );
     _initSpeech();
   }
 
@@ -92,7 +140,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       bool available = await _speech!.initialize(
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
-            if (_uiState == AssistantUiState.listening && _currentTranscript.isNotEmpty) {
+            if (_uiState == AssistantUiState.listening &&
+                _currentTranscript.isNotEmpty) {
               _processTranscript(_currentTranscript);
             }
           }
@@ -115,12 +164,198 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
   @override
   void dispose() {
+    _silenceTimer?.cancel();
     _speech?.stop();
     _workflowSubscription?.cancel();
     _workflowBloc.close();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Widget _buildActivePatientPill(bool isDark) {
+    final activePatient = _getActivePatient();
+    return GestureDetector(
+      onTap: () => _showPatientSwitchModal(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: activePatient != null
+              ? AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.08)
+              : (isDark ? AppColors.darkSurface : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: activePatient != null
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : (isDark ? AppColors.darkBorder : const Color(0xFFCBD5E1)),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              activePatient != null ? Icons.person_rounded : Icons.person_outline_rounded,
+              size: 15,
+              color: activePatient != null ? AppColors.primary : const Color(0xFF94A3B8),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                activePatient != null
+                    ? 'Active: ${activePatient.name}'
+                    : 'No active patient • Tap to switch',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: activePatient != null
+                      ? (isDark ? Colors.white : AppColors.secondary)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.swap_horiz_rounded,
+              size: 15,
+              color: activePatient != null ? AppColors.primary : const Color(0xFF94A3B8),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPatientSwitchModal(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final patients = _getExistingPatients();
+    final activePatient = _getActivePatient();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Switch Active Patient Context',
+                      style: AppTypography.titleMedium(
+                        color: isDark ? Colors.white : AppColors.secondary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (patients.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.person_off_rounded,
+                            size: 36,
+                            color: isDark ? AppColors.darkTextSecondary : const Color(0xFF94A3B8),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No patients registered yet.',
+                            style: TextStyle(
+                              color: isDark ? AppColors.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: patients.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, index) {
+                        final p = patients[index];
+                        final isSelected = activePatient?.id == p.id;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+                          leading: CircleAvatar(
+                            backgroundColor: isSelected
+                                ? AppColors.primary
+                                : (isDark ? AppColors.darkBackground : const Color(0xFFE2E8F0)),
+                            child: Icon(
+                              Icons.person_rounded,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                              size: 18,
+                            ),
+                          ),
+                          title: Text(
+                            p.name,
+                            style: TextStyle(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? AppColors.primary : (isDark ? Colors.white : AppColors.secondary),
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Age: ${p.age} • ${p.gender ?? "Unknown"} • ID: #${p.id}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppColors.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle_rounded, color: AppColors.primary)
+                              : null,
+                          onTap: () {
+                            context.read<PatientBloc>().add(PatientSelected(p));
+                            Navigator.pop(sheetContext);
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: const Text('Add New Patient via Voice/Text'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _processTranscript('Create a new patient.');
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String _getGreeting() {
@@ -131,6 +366,7 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   }
 
   void _startVoiceListening() async {
+    _silenceTimer?.cancel();
     setState(() {
       _currentTranscript = '';
       _uiState = AssistantUiState.listening;
@@ -138,18 +374,35 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
     if (!_speechAvailable) {
       // Simulate real-time voice speech for desktop/emulator or when mic uninitialized
-      _simulateVoiceTyping("I want to record my blood pressure. It's 118 over 76.");
+      _simulateVoiceTyping(
+        "Add a new patient called Chika Okafor. She is 28 years old. She came in complaining of a headache that has lasted two days. Her blood pressure is 118 over 76 and her temperature is 37.2 degrees.",
+      );
       return;
     }
 
     try {
       await _speech!.listen(
         onResult: (result) {
-          if (mounted) {
-            setState(() {
-              _currentTranscript = result.recognizedWords;
-            });
+          if (!mounted) return;
+          setState(() {
+            _currentTranscript = result.recognizedWords;
+          });
+
+          // 1. If final result emitted by speech engine, immediately auto-execute
+          if (result.finalResult) {
+            _stopVoiceListening();
+            return;
           }
+
+          // 2. Silence detection: if user pauses after speaking, auto-stop and execute
+          _silenceTimer?.cancel();
+          _silenceTimer = Timer(const Duration(milliseconds: 1400), () {
+            if (mounted &&
+                _uiState == AssistantUiState.listening &&
+                _currentTranscript.trim().isNotEmpty) {
+              _stopVoiceListening();
+            }
+          });
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.confirmation,
@@ -158,7 +411,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       );
     } catch (e) {
       // Graceful fallback to voice simulation
-      _simulateVoiceTyping("I want to record my blood pressure. It's 118 over 76.");
+      _simulateVoiceTyping(
+        "Add a new patient called Chika Okafor. She is 28 years old. She came in complaining of a headache that has lasted two days. Her blood pressure is 118 over 76 and her temperature is 37.2 degrees.",
+      );
     }
   }
 
@@ -167,28 +422,38 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     String buffer = '';
     for (int i = 0; i < words.length; i++) {
       if (_uiState != AssistantUiState.listening) return;
-      await Future.delayed(const Duration(milliseconds: 250));
+      await Future.delayed(const Duration(milliseconds: 180));
       if (!mounted || _uiState != AssistantUiState.listening) return;
       buffer = words.sublist(0, i + 1).join(' ');
       setState(() {
         _currentTranscript = buffer;
       });
     }
+
+    // Auto-advance to execution after voice simulation finishes typing
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (mounted && _uiState == AssistantUiState.listening) {
+      _stopVoiceListening();
+    }
   }
 
   void _stopVoiceListening() {
+    _silenceTimer?.cancel();
     try {
       _speech?.stop();
     } catch (_) {}
 
     if (_currentTranscript.trim().isNotEmpty) {
-      _processTranscript(_currentTranscript.trim());
+      final transcript = _currentTranscript.trim();
+      _currentTranscript = '';
+      _processTranscript(transcript);
     } else {
       setState(() => _uiState = AssistantUiState.idle);
     }
   }
 
   void _cancelVoiceListening() {
+    _silenceTimer?.cancel();
     try {
       _speech?.stop();
     } catch (_) {}
@@ -212,19 +477,18 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
     setState(() {
       _uiState = AssistantUiState.processing;
-      _messages.add({
-        'sender': 'user',
-        'text': trimmed,
-      });
+      _messages.add({'sender': 'user', 'text': trimmed});
     });
 
     _scrollToBottom();
 
     final existingPatients = _getExistingPatients();
-    _workflowBloc.add(ConversationUtteranceSubmitted(
-      trimmed,
-      existingPatients: existingPatients,
-    ));
+    _workflowBloc.add(
+      ConversationUtteranceSubmitted(
+        trimmed,
+        existingPatients: existingPatients,
+      ),
+    );
   }
 
   void _handleWorkflowStateChange(ConversationWorkflowState state) {
@@ -250,11 +514,13 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         state: state,
         onAnswer: (val) {
           final patients = _getExistingPatients();
-          _workflowBloc.add(ConversationOptionSelected(
-            question.targetField,
-            val,
-            existingPatients: patients,
-          ));
+          _workflowBloc.add(
+            ConversationOptionSelected(
+              question.targetField,
+              val,
+              existingPatients: patients,
+            ),
+          );
         },
         onConfirm: () {
           _workflowBloc.add(const ConversationWorkflowConfirmed());
@@ -264,11 +530,13 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         },
         onSkip: () {
           final patients = _getExistingPatients();
-          _workflowBloc.add(ConversationOptionSelected(
-            'skip_${question.targetField}',
-            true,
-            existingPatients: patients,
-          ));
+          _workflowBloc.add(
+            ConversationOptionSelected(
+              'skip_${question.targetField}',
+              true,
+              existingPatients: patients,
+            ),
+          );
         },
         onBack: () {
           _workflowBloc.add(const ConversationStepBackRequested());
@@ -277,7 +545,7 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
       setState(() {
         _updateOrAddAiMessage(questionText, followUpWidget);
-        _uiState = AssistantUiState.responding;
+        _uiState = AssistantUiState.awaitingInteraction;
       });
 
       _speakText(questionText);
@@ -290,12 +558,37 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       Widget? resultWidget;
 
       switch (state.intent) {
+        case ConversationIntent.switchPatient:
+          final p = state.executionResult as PatientModel?;
+          if (p != null) {
+            responseText = "Switched active context to ${p.name}.";
+            try {
+              context.read<PatientBloc>().add(PatientSelected(p));
+            } catch (_) {}
+          } else {
+            responseText = state.parameters['patientName'] != null
+                ? "Switched context to ${state.parameters['patientName']}."
+                : "Active patient context updated.";
+          }
+          resultWidget = _buildGenUiPatientList();
+          break;
+
         case ConversationIntent.recordVitals:
           final vitals = state.executionResult as VitalRecord?;
-          final sys = vitals?.systolic?.toInt() ?? (state.parameters['systolic'] as num?)?.toInt() ?? 120;
-          final dia = vitals?.diastolic?.toInt() ?? (state.parameters['diastolic'] as num?)?.toInt() ?? 80;
-          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
-          responseText = "Blood pressure reading ($sys/$dia mmHg) recorded successfully for $name.";
+          final sys =
+              vitals?.systolic?.toInt() ??
+              (state.parameters['systolic'] as num?)?.toInt() ??
+              120;
+          final dia =
+              vitals?.diastolic?.toInt() ??
+              (state.parameters['diastolic'] as num?)?.toInt() ??
+              80;
+          final name =
+              state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'patient';
+          responseText =
+              "Blood pressure reading ($sys/$dia mmHg) recorded successfully for $name.";
           resultWidget = _buildGenUiVitalSummary();
           break;
 
@@ -303,23 +596,38 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
           final p = state.executionResult as PatientModel?;
           final name = p?.name ?? state.parameters['name'] ?? 'new patient';
           responseText = "Patient $name has been registered successfully.";
+          if (p != null) {
+            try {
+              context.read<PatientBloc>().add(PatientSelected(p));
+            } catch (_) {}
+          }
           resultWidget = _buildGenUiPatientList();
           break;
 
         case ConversationIntent.draftClinicalNote:
-          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
-          responseText = "Clinical note has been saved to $name's medical record.";
+          final name =
+              state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'patient';
+          responseText =
+              "Clinical note has been saved to $name's medical record.";
           resultWidget = _buildGenUiNoteDraft();
           break;
 
         case ConversationIntent.manageAppointments:
-          final name = state.activePatient?.name ?? state.parameters['patientName'] ?? 'patient';
+          final name =
+              state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'patient';
           responseText = "Follow-up appointment for $name has been scheduled.";
           break;
 
         case ConversationIntent.compareVitals:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
-          responseText = "Here's $name's blood pressure trend for the last 7 days, compared to the previous 7 days.";
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
+          responseText =
+              "Here's $name's blood pressure trend for the last 7 days, compared to the previous 7 days.";
           resultWidget = ClinicalComparisonChartCard(
             patientName: name,
             latestReading: '118/76 mmHg',
@@ -328,20 +636,41 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
           break;
 
         case ConversationIntent.queryPatientHistory:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
           responseText = "Here is the clinical history summary for $name:";
           resultWidget = _buildGenUiRecentActivity();
           break;
 
         case ConversationIntent.openPatientDetails:
         case ConversationIntent.findPatient:
-          final name = state.activePatient?.name ?? 'Chika Okafor';
+          final name = state.activePatient?.name ??
+              state.parameters['patientName'] ??
+              'the patient';
           responseText = "Opening clinical profile and chart for $name:";
           resultWidget = _buildGenUiPatientList();
           break;
 
+        case ConversationIntent.generalQuery:
+          if (state.executionResult is List<PatientModel>) {
+            final list = state.executionResult as List<PatientModel>;
+            responseText =
+                "Found ${list.length} patient${list.length == 1 ? '' : 's'} with high blood pressure:";
+            resultWidget = _buildGenUiPatientList();
+          } else if (state.executionResult is String) {
+            responseText = state.executionResult as String;
+          } else {
+            responseText = "I'm ready to assist with your clinical workflow.";
+          }
+          break;
+
         default:
-          responseText = "Operation completed successfully.";
+          if (state.executionResult is String) {
+            responseText = state.executionResult as String;
+          } else {
+            responseText = "Operation completed successfully.";
+          }
           break;
       }
 
@@ -350,9 +679,22 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         context.read<PatientBloc>().add(PatientListRequested());
       } catch (_) {}
 
+      final suggestions = locator<SuggestionService>().resolveSuggestions(
+        intent: state.intent.name,
+        workflowStatus: state.status.name,
+        patientId: state.activePatient?.id.toString(),
+        patientName: state.activePatient?.name,
+        hasCompletedAction: true,
+        hasAiConsent: _hasAiConsent(),
+      );
+
       setState(() {
-        _updateOrAddAiMessage(responseText, resultWidget);
-        _uiState = AssistantUiState.responding;
+        _updateOrAddAiMessage(
+          responseText,
+          resultWidget,
+          suggestions: suggestions,
+        );
+        _uiState = AssistantUiState.completed;
       });
 
       _speakText(responseText);
@@ -361,7 +703,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     }
 
     if (state.status == WorkflowStatus.failed) {
-      final err = state.errorMessage ?? 'An error occurred while executing the request.';
+      final err =
+          state.errorMessage ??
+          'An error occurred while executing the request.';
       setState(() {
         _updateOrAddAiMessage('Unable to complete request: $err', null);
         _uiState = AssistantUiState.responding;
@@ -382,17 +726,108 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     }
   }
 
-  void _updateOrAddAiMessage(String text, Widget? widget) {
-    if (_messages.isNotEmpty && _messages.last['sender'] == 'ai' && _messages.last['isWorkflow'] == true) {
+  void _updateOrAddAiMessage(
+    String text,
+    Widget? widget, {
+    List<GenUiAction>? suggestions,
+  }) {
+    if (_messages.isNotEmpty &&
+        _messages.last['sender'] == 'ai' &&
+        _messages.last['isWorkflow'] == true) {
       _messages.last['text'] = text;
       _messages.last['widget'] = widget;
+      _messages.last['suggestions'] = suggestions;
     } else {
       _messages.add({
         'sender': 'ai',
         'text': text,
         'widget': widget,
+        'suggestions': suggestions,
         'isWorkflow': true,
       });
+    }
+  }
+
+  void _handleGenUiAction(GenUiAction action) {
+    switch (action.type) {
+      case GenUiActionType.compareVitals:
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
+        _processTranscript(
+          "Compare $name's blood pressure from last week to this week.",
+        );
+        break;
+      case GenUiActionType.viewVitalHistory:
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
+        _processTranscript("Show $name's vital signs.");
+        break;
+      case GenUiActionType.generateSummary:
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
+        _processTranscript("Summarise $name's patient history.");
+        break;
+      case GenUiActionType.recordVitals:
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
+        _processTranscript("Record a new blood pressure reading for $name.");
+        break;
+      case GenUiActionType.viewPatient:
+        final name = action.payload['patientName'] ??
+            _getActivePatient()?.name ??
+            'the patient';
+        _processTranscript("Open $name's latest vitals.");
+        break;
+      case GenUiActionType.confirmSave:
+        _workflowBloc.add(const ConversationWorkflowConfirmed());
+        break;
+      case GenUiActionType.cancelWorkflow:
+        _workflowBloc.add(const ConversationWorkflowCancelled());
+        break;
+      case GenUiActionType.custom:
+        if (action.id == 'enable_ai_sharing' ||
+            action.id == 'enable_ai_consent' ||
+            action.id == 'grant_consent') {
+          try {
+            if (locator.isRegistered<SettingsBloc>()) {
+              locator<SettingsBloc>().add(const AiConsentToggled(true));
+            } else {
+              context.read<SettingsBloc>().add(const AiConsentToggled(true));
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ AI Data Sharing enabled. Live Gemini AI assistant is active.'),
+                backgroundColor: AppColors.primary,
+                duration: Duration(seconds: 3),
+              ),
+            );
+            _updateOrAddAiMessage(
+              '✓ AI Data Sharing has been successfully enabled! Live Gemini AI clinical analysis is now active.',
+              null,
+            );
+          } catch (_) {}
+          return;
+        }
+        _processTranscript(action.label);
+        break;
+      default:
+        _processTranscript(action.label);
+        break;
+    }
+  }
+
+  bool _hasAiConsent() {
+    try {
+      if (locator.isRegistered<SettingsBloc>()) {
+        return locator<SettingsBloc>().state.aiConsent;
+      }
+      return context.read<SettingsBloc>().state.aiConsent;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -413,14 +848,14 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         ? (patientBloc.state as PatientLoadSuccess).patients
         : <PatientModel>[];
 
-    final draft = _patientCreationService.startPatientCreation(prompt, existingPatients);
+    final draft = _patientCreationService.startPatientCreation(
+      prompt,
+      existingPatients,
+    );
     _activePatientDraft = draft;
 
     setState(() {
-      _messages.add({
-        'sender': 'user',
-        'text': prompt,
-      });
+      _messages.add({'sender': 'user', 'text': prompt});
       _messages.add({
         'sender': 'ai',
         'text': draft.questionForCurrentStep,
@@ -455,10 +890,7 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     }
 
     setState(() {
-      _messages.add({
-        'sender': 'user',
-        'text': utterance,
-      });
+      _messages.add({'sender': 'user', 'text': utterance});
       _messages.add({
         'sender': 'ai',
         'text': updatedDraft.questionForCurrentStep,
@@ -477,7 +909,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     setState(() {
       _activePatientDraft = _activePatientDraft!.copyWith(isSaving: true);
       if (_messages.isNotEmpty && _messages.last['sender'] == 'ai') {
-        _messages.last['widget'] = _buildPatientCreationCard(_activePatientDraft!);
+        _messages.last['widget'] = _buildPatientCreationCard(
+          _activePatientDraft!,
+        );
       }
     });
 
@@ -505,7 +939,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     context.read<PatientBloc>().add(PatientListRequested());
 
     if (savedDraft.createdPatient != null) {
-      _speakText("Patient ${savedDraft.createdPatient!.name} has been registered successfully.");
+      _speakText(
+        "Patient ${savedDraft.createdPatient!.name} has been registered successfully.",
+      );
     }
     _scrollToBottom();
   }
@@ -517,9 +953,13 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       onSkip: () => _handlePatientCreationStep('skip'),
       onCancel: () {
         setState(() {
-          _activePatientDraft = draft.copyWith(currentStep: PatientCreationStep.cancelled);
+          _activePatientDraft = draft.copyWith(
+            currentStep: PatientCreationStep.cancelled,
+          );
           if (_messages.isNotEmpty && _messages.last['sender'] == 'ai') {
-            _messages.last['widget'] = _buildPatientCreationCard(_activePatientDraft!);
+            _messages.last['widget'] = _buildPatientCreationCard(
+              _activePatientDraft!,
+            );
             _messages.last['text'] = 'Patient registration cancelled.';
           }
         });
@@ -527,20 +967,30 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       },
       onEdit: () {
         setState(() {
-          _activePatientDraft = draft.copyWith(currentStep: PatientCreationStep.name);
+          _activePatientDraft = draft.copyWith(
+            currentStep: PatientCreationStep.name,
+          );
           if (_messages.isNotEmpty && _messages.last['sender'] == 'ai') {
-            _messages.last['widget'] = _buildPatientCreationCard(_activePatientDraft!);
-            _messages.last['text'] = _activePatientDraft!.questionForCurrentStep;
+            _messages.last['widget'] = _buildPatientCreationCard(
+              _activePatientDraft!,
+            );
+            _messages.last['text'] =
+                _activePatientDraft!.questionForCurrentStep;
           }
         });
       },
       onConfirm: _confirmAndSavePatient,
       onProceedAnyway: () {
         setState(() {
-          _activePatientDraft = draft.copyWith(currentStep: PatientCreationStep.review);
+          _activePatientDraft = draft.copyWith(
+            currentStep: PatientCreationStep.review,
+          );
           if (_messages.isNotEmpty && _messages.last['sender'] == 'ai') {
-            _messages.last['widget'] = _buildPatientCreationCard(_activePatientDraft!);
-            _messages.last['text'] = _activePatientDraft!.questionForCurrentStep;
+            _messages.last['widget'] = _buildPatientCreationCard(
+              _activePatientDraft!,
+            );
+            _messages.last['text'] =
+                _activePatientDraft!.questionForCurrentStep;
           }
         });
       },
@@ -548,7 +998,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         context.read<PatientBloc>().add(PatientSelected(patient));
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => PatientDetailsPage(patient: patient)),
+          MaterialPageRoute(
+            builder: (_) => PatientDetailsPage(patient: patient),
+          ),
         );
       },
       onRecordVitals: (patient) {
@@ -586,7 +1038,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
     switch (intent) {
       case ClinicalIntent.compareVitalReadings:
-        responseText = "Here's Chika's blood pressure trend for the last 7 days, compared to the previous 7 days.";
+        responseText =
+            "Here's Chika's blood pressure trend for the last 7 days, compared to the previous 7 days.";
         genUiWidget = const ClinicalComparisonChartCard(
           patientName: 'Chika Okafor',
           latestReading: '118/76 mmHg',
@@ -595,7 +1048,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         break;
 
       case ClinicalIntent.listPatients:
-        responseText = "Here are your patients matching your follow-up criteria:";
+        responseText =
+            "Here are your patients matching your follow-up criteria:";
         genUiWidget = _buildGenUiPatientList();
         break;
 
@@ -605,7 +1059,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         break;
 
       case ClinicalIntent.draftClinicalNote:
-        responseText = "I've drafted a clinical visit note for your encounter with Chika Okafor. You can review and edit below:";
+        responseText =
+            "I've drafted a clinical visit note for your encounter with Chika Okafor. You can review and edit below:";
         genUiWidget = _buildGenUiNoteDraft();
         break;
 
@@ -615,15 +1070,13 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
         break;
 
       default:
-        responseText = "I can assist you with reviewing patient charts, comparing vital signs over time, drafting clinical encounter notes, and recording new measurements.";
+        responseText =
+            "I can assist you with reviewing patient charts, comparing vital signs over time, drafting clinical encounter notes, and recording new measurements.";
         break;
     }
 
     setState(() {
-      _messages.add({
-        'sender': 'user',
-        'text': userPrompt,
-      });
+      _messages.add({'sender': 'user', 'text': userPrompt});
       _messages.add({
         'sender': 'ai',
         'text': responseText,
@@ -679,7 +1132,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
     // 2. Processing State
     if (_uiState == AssistantUiState.processing) {
       return Scaffold(
-        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        backgroundColor: isDark
+            ? AppColors.darkBackground
+            : AppColors.lightBackground,
         appBar: const VoiceVitalsTopBar(),
         body: Center(
           child: Column(
@@ -705,7 +1160,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
               Text(
                 'Accessing authorized patient records',
                 style: AppTypography.bodySmall(
-                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.lightTextSecondary,
                 ),
               ),
             ],
@@ -714,27 +1171,35 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       );
     }
 
-    // 3. Conversational GenUI Mode (Responding / Chat)
-    if (_uiState == AssistantUiState.responding) {
+    // 3. Conversational GenUI Mode (Responding / Chat / Completed / Awaiting Interaction)
+    if (_uiState == AssistantUiState.responding ||
+        _uiState == AssistantUiState.completed ||
+        _uiState == AssistantUiState.awaitingInteraction) {
       return Scaffold(
-        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        backgroundColor: isDark
+            ? AppColors.darkBackground
+            : AppColors.lightBackground,
         appBar: AppBar(
-          backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+          backgroundColor: isDark
+              ? AppColors.darkBackground
+              : AppColors.lightBackground,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_rounded, color: isDark ? Colors.white : AppColors.secondary),
-            onPressed: () => setState(() => _uiState = AssistantUiState.idle),
-          ),
-          title: Text(
-            'VoiceVitals',
-            style: AppTypography.titleLarge(
+            icon: Icon(
+              Icons.arrow_back_rounded,
               color: isDark ? Colors.white : AppColors.secondary,
             ),
+            onPressed: () => setState(() => _uiState = AssistantUiState.idle),
           ),
+          title: _buildActivePatientPill(isDark),
+          centerTitle: true,
           actions: [
             if (_isTtsPlaying)
               IconButton(
-                icon: const Icon(Icons.volume_off_rounded, color: AppColors.primary),
+                icon: const Icon(
+                  Icons.volume_off_rounded,
+                  color: AppColors.primary,
+                ),
                 tooltip: 'Stop Audio',
                 onPressed: _stopSpeaking,
               ),
@@ -750,7 +1215,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 itemCount: _messages.length,
                 itemBuilder: (ctx, idx) {
                   final msg = _messages[idx];
@@ -762,7 +1230,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                       alignment: Alignment.centerRight,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12, left: 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.subtleTealSurface,
                           borderRadius: BorderRadius.circular(16),
@@ -792,14 +1263,20 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                               color: AppColors.primary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.favorite, color: Colors.white, size: 14),
+                            child: const Icon(
+                              Icons.favorite,
+                              color: Colors.white,
+                              size: 14,
+                            ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               msg['text'] as String,
                               style: AppTypography.bodyMedium(
-                                color: isDark ? Colors.white : AppColors.secondary,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColors.secondary,
                               ),
                             ),
                           ),
@@ -810,6 +1287,23 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                         Padding(
                           padding: const EdgeInsets.only(left: 38),
                           child: widgetComponent,
+                        ),
+                      ],
+                      if (msg['suggestions'] is List<GenUiAction> &&
+                          (msg['suggestions'] as List<GenUiAction>)
+                              .isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 38),
+                          child: SuggestionCard(
+                            component: const GenUiComponent(
+                              id: 'msg_suggestions',
+                              type: GenUiComponentTypes.suggestionCard,
+                            ),
+                            overrideActions:
+                                msg['suggestions'] as List<GenUiAction>,
+                            onActionSelected: _handleGenUiAction,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -826,7 +1320,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                 color: isDark ? AppColors.darkSurface : Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    color: isDark
+                        ? AppColors.darkBorder
+                        : AppColors.lightBorder,
                   ),
                 ),
               ),
@@ -843,7 +1339,11 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.mic_rounded, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.mic_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -860,7 +1360,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                         },
                         decoration: const InputDecoration(
                           hintText: 'Ask another question...',
-                          hintStyle: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+                          hintStyle: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF94A3B8),
+                          ),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -869,7 +1372,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.search_rounded, color: AppColors.primary),
+                      icon: const Icon(
+                        Icons.search_rounded,
+                        color: AppColors.primary,
+                      ),
                       onPressed: () {
                         final text = _textController.text.trim();
                         if (text.isNotEmpty) {
@@ -889,14 +1395,19 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
     // 4. Hero Home Assistant Idle Screen (Screen 2)
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: const VoiceVitalsTopBar(),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22.0,
+                  vertical: 12.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -924,10 +1435,80 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                     Text(
                       'What would you like to do today?',
                       style: AppTypography.bodyMedium(
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.lightTextSecondary,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    _buildActivePatientPill(isDark),
+                    const SizedBox(height: 16),
+
+                    if (!_hasAiConsent()) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F2942) : const Color(0xFFE0F2FE),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFBAE6FD),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_user_outlined,
+                              size: 22,
+                              color: Color(0xFF0284C7),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'AI Data Sharing is off. Enable it to unlock live Gemini clinical intelligence.',
+                                style: AppTypography.bodySmall(
+                                  color: isDark ? Colors.white70 : const Color(0xFF0369A1),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: const Color(0xFF0284C7),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: () {
+                                if (locator.isRegistered<SettingsBloc>()) {
+                                  locator<SettingsBloc>().add(const AiConsentToggled(true));
+                                } else {
+                                  context.read<SettingsBloc>().add(const AiConsentToggled(true));
+                                }
+                                setState(() {});
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('✓ AI Data Sharing enabled. Live Gemini AI assistant is active.'),
+                                    backgroundColor: AppColors.primary,
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Enable',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     // "Try saying" Suggestions Container
                     Container(
@@ -936,7 +1517,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                         color: isDark ? AppColors.darkSurface : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.lightBorder,
                           width: 1,
                         ),
                         boxShadow: [
@@ -953,7 +1536,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                           Text(
                             'Try saying',
                             style: AppTypography.labelMedium(
-                              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.lightTextSecondary,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -962,7 +1547,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                               onTap: () => _processTranscript(prompt),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                ),
                                 child: Row(
                                   children: [
                                     const Icon(
@@ -975,7 +1562,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                                       child: Text(
                                         '"$prompt"',
                                         style: AppTypography.bodySmall(
-                                          color: isDark ? Colors.white : AppColors.secondary,
+                                          color: isDark
+                                              ? Colors.white
+                                              : AppColors.secondary,
                                         ),
                                       ),
                                     ),
@@ -1013,7 +1602,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primary.withValues(alpha: 0.35),
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.35,
+                                        ),
                                         blurRadius: 18,
                                         offset: const Offset(0, 6),
                                       ),
@@ -1039,14 +1630,18 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                           Text(
                             'Tap to speak',
                             style: AppTypography.titleMedium(
-                              color: isDark ? Colors.white : AppColors.secondary,
+                              color: isDark
+                                  ? Colors.white
+                                  : AppColors.secondary,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'or type a request',
                             style: AppTypography.bodySmall(
-                              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.lightTextSecondary,
                             ),
                           ),
                         ],
@@ -1065,19 +1660,28 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                 color: isDark ? AppColors.darkSurface : Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    color: isDark
+                        ? AppColors.darkBorder
+                        : AppColors.lightBorder,
                   ),
                 ),
               ),
               child: SafeArea(
                 top: false,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkContainer : const Color(0xFFF8FAFC),
+                    color: isDark
+                        ? AppColors.darkContainer
+                        : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                      color: isDark
+                          ? AppColors.darkBorder
+                          : AppColors.lightBorder,
                     ),
                   ),
                   child: Row(
@@ -1170,7 +1774,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
     return BlocBuilder<PatientBloc, PatientState>(
       builder: (context, state) {
-        final patients = state is PatientLoadSuccess ? state.patients : <PatientModel>[];
+        final patients = state is PatientLoadSuccess
+            ? state.patients
+            : <PatientModel>[];
         if (patients.isEmpty) return const SizedBox();
 
         return Container(
@@ -1178,14 +1784,18 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkSurface : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Patients Requiring Review',
-                style: AppTypography.titleSmall(color: isDark ? Colors.white : AppColors.secondary),
+                style: AppTypography.titleSmall(
+                  color: isDark ? Colors.white : AppColors.secondary,
+                ),
               ),
               const SizedBox(height: 10),
               ...patients.take(3).map((p) {
@@ -1194,12 +1804,17 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                     context.read<PatientBloc>().add(PatientSelected(p));
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => PatientDetailsPage(patient: p)),
+                      MaterialPageRoute(
+                        builder: (_) => PatientDetailsPage(patient: p),
+                      ),
                     );
                   },
                   borderRadius: BorderRadius.circular(10),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 4,
+                    ),
                     child: Row(
                       children: [
                         CircleAvatar(
@@ -1207,7 +1822,10 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                           backgroundColor: AppColors.subtleTealSurface,
                           child: Text(
                             p.name.isNotEmpty ? p.name[0] : 'P',
-                            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1215,15 +1833,30 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(p.name, style: AppTypography.titleSmall(color: isDark ? Colors.white : AppColors.secondary)),
                               Text(
-                                p.medicalConditions.isNotEmpty ? p.medicalConditions.first : 'Routine Care',
-                                style: AppTypography.bodySmall(color: AppColors.lightTextSecondary),
+                                p.name,
+                                style: AppTypography.titleSmall(
+                                  color: isDark
+                                      ? Colors.white
+                                      : AppColors.secondary,
+                                ),
+                              ),
+                              Text(
+                                p.medicalConditions.isNotEmpty
+                                    ? p.medicalConditions.first
+                                    : 'Routine Care',
+                                style: AppTypography.bodySmall(
+                                  color: AppColors.lightTextSecondary,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF94A3B8)),
+                        const Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: Color(0xFF94A3B8),
+                        ),
                       ],
                     ),
                   ),
@@ -1245,7 +1878,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1255,7 +1890,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
             children: [
               Text(
                 'Chika Okafor (CV-10024)',
-                style: AppTypography.titleSmall(color: isDark ? Colors.white : AppColors.secondary),
+                style: AppTypography.titleSmall(
+                  color: isDark ? Colors.white : AppColors.secondary,
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1263,7 +1900,14 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
                   color: AppColors.successContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text('Normal', style: TextStyle(color: AppColors.onSuccessContainer, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Normal',
+                  style: TextStyle(
+                    color: AppColors.onSuccessContainer,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1287,11 +1931,14 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
               ),
               onPressed: () {
                 final patientState = context.read<PatientBloc>().state;
-                if (patientState is PatientLoadSuccess && patientState.patients.isNotEmpty) {
+                if (patientState is PatientLoadSuccess &&
+                    patientState.patients.isNotEmpty) {
                   final chika = patientState.patients.first;
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => PatientDetailsPage(patient: chika)),
+                    MaterialPageRoute(
+                      builder: (_) => PatientDetailsPage(patient: chika),
+                    ),
                   );
                 }
               },
@@ -1306,10 +1953,23 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   Widget _buildMetricPill(String label, String value, String unit) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        Text(unit, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        Text(
+          unit,
+          style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+        ),
       ],
     );
   }
@@ -1318,7 +1978,8 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   Widget _buildGenUiNoteDraft() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final noteController = TextEditingController(
-      text: 'Encounter Note:\nSubjective: Patient reports feeling well, adhering to low-sodium diet.\nObjective: Blood pressure sitting 118/76 mmHg, HR 72 bpm, SpO2 98%.\nAssessment: Well-controlled Stage 1 Essential Hypertension.\nPlan: Continue Amlodipine 5mg daily. Follow-up visit in 3 months.',
+      text:
+          'Encounter Note:\nSubjective: Patient reports feeling well, adhering to low-sodium diet.\nObjective: Blood pressure sitting 118/76 mmHg, HR 72 bpm, SpO2 98%.\nAssessment: Well-controlled Stage 1 Essential Hypertension.\nPlan: Continue Amlodipine 5mg daily. Follow-up visit in 3 months.',
     );
 
     return Container(
@@ -1326,18 +1987,26 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 20),
+              const Icon(
+                Icons.edit_note_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Clinical Visit Note Draft',
-                style: AppTypography.titleSmall(color: isDark ? Colors.white : AppColors.secondary),
+                style: AppTypography.titleSmall(
+                  color: isDark ? Colors.white : AppColors.secondary,
+                ),
               ),
             ],
           ),
@@ -1348,8 +2017,13 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
             style: const TextStyle(fontSize: 13, height: 1.4),
             decoration: InputDecoration(
               filled: true,
-              fillColor: isDark ? AppColors.darkContainer : const Color(0xFFF8FAFC),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              fillColor: isDark
+                  ? AppColors.darkContainer
+                  : const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -1357,8 +2031,16 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.check, size: 16, color: Colors.white),
-              label: const Text('Save Clinical Note', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              label: const Text(
+                'Save Clinical Note',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
               onPressed: () async {
                 final repo = locator<PatientRepository>();
                 await repo.saveClinicalNote(
@@ -1373,19 +2055,23 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
 
                 if (mounted) {
                   context.read<ActivityBloc>().add(
-                        ActivityLogged(
-                          ActivityItem(
-                            title: 'Note added',
-                            subtitle: 'General Consultation • Chika Okafor',
-                            timestamp: DateTime.now(),
-                            category: ActivityCategory.notes,
-                            patientId: 1,
-                            patientName: 'Chika Okafor',
-                          ),
-                        ),
-                      );
+                    ActivityLogged(
+                      ActivityItem(
+                        title: 'Note added',
+                        subtitle: 'General Consultation • Chika Okafor',
+                        timestamp: DateTime.now(),
+                        category: ActivityCategory.notes,
+                        patientId: 1,
+                        patientName: 'Chika Okafor',
+                      ),
+                    ),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Clinical note successfully recorded for Chika Okafor.')),
+                    const SnackBar(
+                      content: Text(
+                        'Clinical note successfully recorded for Chika Okafor.',
+                      ),
+                    ),
                   );
                 }
               },
@@ -1400,7 +2086,9 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
   Widget _buildGenUiRecentActivity() {
     return BlocBuilder<ActivityBloc, ActivityState>(
       builder: (context, state) {
-        final items = state is ActivityLoadSuccess ? state.activities : <ActivityItem>[];
+        final items = state is ActivityLoadSuccess
+            ? state.activities
+            : <ActivityItem>[];
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -1411,14 +2099,21 @@ class _AssistantPageState extends State<AssistantPage> with SingleTickerProvider
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Recent Actions', style: AppTypography.titleSmall(color: AppColors.secondary)),
+              Text(
+                'Recent Actions',
+                style: AppTypography.titleSmall(color: AppColors.secondary),
+              ),
               const SizedBox(height: 8),
               ...items.take(3).map((item) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 16),
+                      const Icon(
+                        Icons.check_circle_outline,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

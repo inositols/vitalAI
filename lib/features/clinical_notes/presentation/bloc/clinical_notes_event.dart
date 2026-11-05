@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import '../../patients/data/models/clinical_note.dart';
+import 'package:vitalai/features/patients/data/models/clinical_note.dart';
 
 abstract class ClinicalNotesEvent extends Equatable {
   const ClinicalNotesEvent();

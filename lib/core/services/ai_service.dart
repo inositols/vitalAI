@@ -6,6 +6,7 @@ import 'package:vitalai/core/genui/services/genui_prompt_builder.dart';
 import 'package:vitalai/features/ai_assistant/data/models/chat_message.dart';
 import 'package:vitalai/features/ai_assistant/data/models/health_context.dart';
 import 'package:vitalai/features/settings/presentation/bloc/settings_bloc.dart';
+import 'package:vitalai/features/settings/presentation/bloc/settings_event.dart';
 
 /// Service responsible for communicating with Gemini to answer any health and medical question,
 /// generate context-aware clinical insights, summarize trends, prepare doctor visits,
@@ -51,7 +52,11 @@ class AiService {
   }
 
   /// Update the user consent status.
-  void setConsent(bool consented) {}
+  void setConsent(bool consented) {
+    if (locator.isRegistered<SettingsBloc>()) {
+      locator<SettingsBloc>().add(AiConsentToggled(consented));
+    }
+  }
 
   /// Whether the user has consented to sharing data with the AI.
   bool get hasConsent {
@@ -118,8 +123,10 @@ class AiService {
     HealthContext? healthContext,
     List<ChatMessage>? history,
   }) async {
-    if (!hasConsent) {
-      return "Consent Required: Please enable AI sharing in your settings before asking the AI assistant.";
+    // 1. Check emergency crisis triggers first (clinical safety priority)
+    final emergencyCheck = _checkEmergencyInput(prompt, healthContext);
+    if (emergencyCheck != null) {
+      return emergencyCheck;
     }
 
     // Auto-resolve API key from SettingsBloc if not yet configured
@@ -130,21 +137,15 @@ class AiService {
       }
     }
 
-    // 1. Check emergency crisis triggers first
-    final emergencyCheck = _checkEmergencyInput(prompt, healthContext);
-    if (emergencyCheck != null) {
-      return emergencyCheck;
-    }
-
     // 2. Classify user intent
     final intent = AiIntentClassifier.classify(prompt);
 
-    // 3. If Gemini Model is configured, query Gemini API directly
+    // 3. If user has consented to AI data sharing and Gemini Model is configured, query Gemini API directly
     final rawKey = (_apiKey != null && _apiKey!.trim().isNotEmpty)
         ? _apiKey!.trim()
         : '';
 
-    if (rawKey.isNotEmpty) {
+    if (hasConsent && rawKey.isNotEmpty) {
       final isPersonalQuery = intent == AiIntent.singleVitalInquiry ||
           intent == AiIntent.vitalTrendAnalysis ||
           intent == AiIntent.vitalsComparison ||

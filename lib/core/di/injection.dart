@@ -36,6 +36,15 @@ import '../conversation/services/follow_up_question_resolver.dart';
 import '../conversation/services/action_executor.dart';
 import '../conversation/services/conversation_orchestrator.dart';
 import '../conversation/bloc/conversation_workflow_bloc.dart';
+import '../genui/services/suggestion_service.dart';
+import '../genui/services/component_selection_service.dart';
+import '../genui/engine/genui_engine.dart';
+import '../../features/conversation/domain/repositories/conversation_repository.dart';
+import '../../features/conversation/data/repositories/conversation_repository_impl.dart';
+import '../../features/conversation/domain/use_cases/process_user_message_use_case.dart';
+import '../../features/conversation/domain/use_cases/submit_clarification_use_case.dart';
+import '../../features/conversation/domain/use_cases/workflow_control_use_cases.dart';
+import '../../features/conversation/presentation/bloc/conversation_bloc.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -181,6 +190,7 @@ Future<void> setupLocator() async {
       vitalsRepository: locator<VitalsRepository>(),
       reminderRepository: locator<ReminderRepository>(),
       activityRepository: locator<ActivityRepository>(),
+      aiService: locator.isRegistered<AiService>() ? locator<AiService>() : null,
     ),
   );
   locator.registerLazySingleton<ConversationOrchestrator>(
@@ -197,8 +207,50 @@ Future<void> setupLocator() async {
     ),
   );
 
-  // 14. Initialize Database and Seed Default Clinical Records
+  // 14. Intelligent GenUI & Conversation Architecture
+  locator.registerLazySingleton<SuggestionService>(() => const SuggestionService());
+  locator.registerLazySingleton<ComponentSelectionService>(
+    () => ComponentSelectionService(suggestionService: locator<SuggestionService>()),
+  );
+  locator.registerLazySingleton<GenUiEngine>(
+    () => GenUiEngine(
+      suggestionService: locator<SuggestionService>(),
+      componentSelectionService: locator<ComponentSelectionService>(),
+    ),
+  );
+  locator.registerLazySingleton<ConversationRepository>(
+    () => ConversationRepositoryImpl(orchestrator: locator<ConversationOrchestrator>()),
+  );
+  locator.registerLazySingleton<ProcessUserMessageUseCase>(
+    () => ProcessUserMessageUseCase(locator<ConversationRepository>()),
+  );
+  locator.registerLazySingleton<SubmitClarificationUseCase>(
+    () => SubmitClarificationUseCase(locator<ConversationRepository>()),
+  );
+  locator.registerLazySingleton<ConfirmConversationWorkflowUseCase>(
+    () => ConfirmConversationWorkflowUseCase(locator<ConversationRepository>()),
+  );
+  locator.registerLazySingleton<CancelConversationWorkflowUseCase>(
+    () => CancelConversationWorkflowUseCase(locator<ConversationRepository>()),
+  );
+  locator.registerLazySingleton<StepBackConversationWorkflowUseCase>(
+    () => StepBackConversationWorkflowUseCase(locator<ConversationRepository>()),
+  );
+  locator.registerFactory(
+    () => ConversationBloc(
+      processUserMessage: locator<ProcessUserMessageUseCase>(),
+      submitClarification: locator<SubmitClarificationUseCase>(),
+      confirmWorkflow: locator<ConfirmConversationWorkflowUseCase>(),
+      cancelWorkflow: locator<CancelConversationWorkflowUseCase>(),
+      stepBackWorkflow: locator<StepBackConversationWorkflowUseCase>(),
+      genUiEngine: locator<GenUiEngine>(),
+      suggestionService: locator<SuggestionService>(),
+      componentSelectionService: locator<ComponentSelectionService>(),
+    ),
+  );
+
+  // 15. Initialize Database and purge any pre-seeded demo records
   await dbService.init();
-  await ClinicalDataSeeder.seedDefaultClinicalData(dbService);
+  await ClinicalDataSeeder.purgeDemoPatients(dbService);
 }
 

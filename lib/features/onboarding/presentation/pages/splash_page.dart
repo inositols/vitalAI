@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_brand_logo.dart';
+import '../../../../core/di/injection.dart';
+import '../../../auth/domain/repositories/auth_repository.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -47,7 +49,14 @@ class _SplashPageState extends State<SplashPage>
     await Future.delayed(const Duration(milliseconds: 2000));
     if (!mounted) return;
 
-    context.go('/');
+    final isAuth = locator.isRegistered<AuthRepository>() &&
+        locator<AuthRepository>().currentUser != null;
+
+    if (isAuth) {
+      context.go('/');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override

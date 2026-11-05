@@ -301,6 +301,29 @@ class _SettingsPageState extends State<SettingsPage> {
                           _buildDivider(isDark),
                           _buildProfileRow(
                             context,
+                            icon: Icons.shield_outlined,
+                            iconBg: const Color(0xFFE0F2FE),
+                            iconColor: const Color(0xFF0284C7),
+                            title: 'AI Data Sharing Consent',
+                            subtitle: settingsState.aiConsent
+                                ? 'Enabled • Live AI Assistant Active'
+                                : 'Disabled • Tap to enable AI assistance',
+                            trailing: Switch(
+                              value: settingsState.aiConsent,
+                              activeThumbColor: const Color(0xFF0062E0),
+                              onChanged: (val) {
+                                context.read<SettingsBloc>().add(AiConsentToggled(val));
+                              },
+                            ),
+                            onTap: () {
+                              context.read<SettingsBloc>().add(
+                                    AiConsentToggled(!settingsState.aiConsent),
+                                  );
+                            },
+                          ),
+                          _buildDivider(isDark),
+                          _buildProfileRow(
+                            context,
                             icon: Icons.biotech_rounded,
                             iconBg: const Color(0xFFE0F2FE),
                             iconColor: const Color(0xFF0284C7),

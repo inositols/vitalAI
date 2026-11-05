@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/routing/router.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -23,6 +24,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     _authStateSubscription = authRepository.authStateChanges.listen((_) {
       add(AuthCheckRequested());
+      AuthChangeNotifier.instance.notify();
     });
   }
 
@@ -43,6 +45,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = await authRepository.signInWithEmailAndPassword(
           event.email, event.password);
       emit(AuthAuthenticated(user));
+      AuthChangeNotifier.instance.notify();
     } catch (e) {
       final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
       emit(AuthFailure(msg));
@@ -56,6 +59,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = await authRepository.registerWithEmailAndPassword(
           event.email, event.password);
       emit(AuthAuthenticated(user));
+      AuthChangeNotifier.instance.notify();
     } catch (e) {
       final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
       emit(AuthFailure(msg));
@@ -68,6 +72,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final user = await authRepository.signInWithGoogle();
       emit(AuthAuthenticated(user));
+      AuthChangeNotifier.instance.notify();
     } catch (e) {
       final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
       emit(AuthFailure(msg));
@@ -80,6 +85,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final user = await authRepository.signInAnonymously();
       emit(AuthAuthenticated(user));
+      AuthChangeNotifier.instance.notify();
     } catch (e) {
       final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
       emit(AuthFailure(msg));
@@ -92,6 +98,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       await authRepository.signOut();
       emit(AuthUnauthenticated());
+      AuthChangeNotifier.instance.notify();
     } catch (e) {
       final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
       emit(AuthFailure(msg));

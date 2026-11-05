@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/repositories/patient_repository.dart';
 import '../../data/models/patient_model.dart';
@@ -12,6 +13,7 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
   final PatientRepository patientRepository;
   final AuthRepository? authRepository;
   PatientModel? _activePatient;
+  StreamSubscription<AuthUser?>? _authSubscription;
 
   PatientBloc({
     required this.patientRepository,
@@ -21,34 +23,25 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
     on<PatientSelected>(_onPatientSelected);
     on<PatientSaved>(_onPatientSaved);
     on<PatientDeleted>(_onPatientDeleted);
+
+    _authSubscription = authRepository?.authStateChanges.listen((_) {
+      _activePatient = null;
+      add(PatientListRequested());
+    });
   }
 
   Future<void> _onPatientListRequested(
       PatientListRequested event, Emitter<PatientState> emit) async {
     emit(PatientLoading());
     try {
-      var patients = await patientRepository.getPatients();
-      if (patients.isEmpty) {
-        final user = authRepository?.currentUser;
-        String profileName = 'User';
-        if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
-          profileName = user.displayName!.trim();
-        } else if (user?.email != null && user!.email!.contains('@')) {
-          profileName = user.email!.split('@')[0];
-        }
-        final initialPatient = PatientModel()
-          ..name = profileName
-          ..medicalConditions = []
-          ..allergies = []
-          ..medications = [];
-        await patientRepository.savePatient(initialPatient);
-        patients = await patientRepository.getPatients();
-      }
+      final patients = await patientRepository.getPatients();
 
-      // Auto-select first patient if none selected, or refresh active patient
-      if (_activePatient == null && patients.isNotEmpty) {
+      // Refresh active patient if patients exist, otherwise null
+      if (patients.isEmpty) {
+        _activePatient = null;
+      } else if (_activePatient == null) {
         _activePatient = patients.first;
-      } else if (_activePatient != null && patients.isNotEmpty) {
+      } else {
         _activePatient = patients.firstWhere(
           (p) => p.id == _activePatient!.id,
           orElse: () => patients.first,
@@ -100,5 +93,11 @@ class PatientBloc extends Bloc<PatientEvent, PatientState> {
     } catch (e) {
       emit(PatientFailure(e.toString()));
     }
+  }
+
+  @override
+  Future<void> close() {
+    _authSubscription?.cancel();
+    return super.close();
   }
 }

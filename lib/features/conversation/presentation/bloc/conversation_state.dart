@@ -4,25 +4,36 @@ import '../../domain/models/models.dart';
 /// Base abstract class for Conversation BLoC states.
 /// Every state wraps the strongly-typed [ConversationWorkflowState] maintaining
 /// the full conversational context (active patient, collected parameters,
-/// validation errors, history stack, and active question).
+/// validation errors, history stack, and active question) plus dynamic [GenUiResponse].
 abstract class ConversationState extends Equatable {
   final ConversationWorkflowState workflowState;
+  final GenUiResponse? genUiResponse;
 
-  const ConversationState({required this.workflowState});
+  const ConversationState({
+    required this.workflowState,
+    this.genUiResponse,
+  });
 
   @override
-  List<Object?> get props => [workflowState];
+  List<Object?> get props => [workflowState, genUiResponse];
 }
 
 /// Initial idle state when no conversation is active.
 class ConversationInitial extends ConversationState {
-  ConversationInitial({ConversationWorkflowState? workflowState})
-      : super(workflowState: workflowState ?? ConversationWorkflowState.idle());
+  ConversationInitial({
+    ConversationWorkflowState? workflowState,
+    super.genUiResponse,
+  }) : super(
+          workflowState: workflowState ?? ConversationWorkflowState.idle(),
+        );
 }
 
 /// State when natural language utterance or selection is being parsed/validated.
 class ConversationProcessing extends ConversationState {
-  const ConversationProcessing({required super.workflowState});
+  const ConversationProcessing({
+    required super.workflowState,
+    super.genUiResponse,
+  });
 }
 
 /// State when user input is needed for a missing required field or open clarification.
@@ -32,10 +43,11 @@ class ConversationAwaitingInput extends ConversationState {
   const ConversationAwaitingInput({
     required super.workflowState,
     required this.question,
+    super.genUiResponse,
   });
 
   @override
-  List<Object?> get props => [workflowState, question];
+  List<Object?> get props => [workflowState, question, genUiResponse];
 }
 
 /// State when multiple discrete choices or candidate entities need user selection.
@@ -47,10 +59,11 @@ class ConversationAwaitingSelection extends ConversationState {
     required super.workflowState,
     required this.question,
     this.options = const [],
+    super.genUiResponse,
   });
 
   @override
-  List<Object?> get props => [workflowState, question, options];
+  List<Object?> get props => [workflowState, question, options, genUiResponse];
 }
 
 /// State when all required parameters are collected and confirmation is needed
@@ -61,15 +74,19 @@ class ConversationAwaitingConfirmation extends ConversationState {
   const ConversationAwaitingConfirmation({
     required super.workflowState,
     required this.confirmationQuestion,
+    super.genUiResponse,
   });
 
   @override
-  List<Object?> get props => [workflowState, confirmationQuestion];
+  List<Object?> get props => [workflowState, confirmationQuestion, genUiResponse];
 }
 
 /// State when an authorized database write, sync, or backend action is in progress.
 class ConversationExecutingAction extends ConversationState {
-  const ConversationExecutingAction({required super.workflowState});
+  const ConversationExecutingAction({
+    required super.workflowState,
+    super.genUiResponse,
+  });
 }
 
 /// State when a clinical action has successfully completed.
@@ -81,10 +98,11 @@ class ConversationSuccess extends ConversationState {
     required super.workflowState,
     this.result,
     this.successMessage = 'Action completed successfully.',
+    super.genUiResponse,
   });
 
   @override
-  List<Object?> get props => [workflowState, result, successMessage];
+  List<Object?> get props => [workflowState, result, successMessage, genUiResponse];
 }
 
 /// State when an error or validation failure occurred during conversation workflow.
@@ -94,8 +112,9 @@ class ConversationFailure extends ConversationState {
   const ConversationFailure({
     required super.workflowState,
     required this.errorMessage,
+    super.genUiResponse,
   });
 
   @override
-  List<Object?> get props => [workflowState, errorMessage];
+  List<Object?> get props => [workflowState, errorMessage, genUiResponse];
 }

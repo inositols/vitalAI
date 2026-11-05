@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:vitalai/core/di/injection.dart';
+import 'package:vitalai/features/auth/domain/repositories/auth_repository.dart';
 import 'package:vitalai/features/assistant/presentation/pages/assistant_page.dart';
 import 'package:vitalai/features/patients/presentation/pages/patients_page.dart';
 import 'package:vitalai/features/activity/presentation/pages/activity_page.dart';
@@ -23,9 +25,45 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(
 final GlobalKey<NavigatorState> _shellNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'shell');
 
+/// Listenable that notifies GoRouter to re-evaluate route guards whenever auth status changes.
+class AuthChangeNotifier extends ChangeNotifier {
+  static final AuthChangeNotifier instance = AuthChangeNotifier._();
+  AuthChangeNotifier._();
+
+  void notify() => notifyListeners();
+}
+
+bool _isUserAuthenticated() {
+  if (locator.isRegistered<AuthRepository>()) {
+    return locator<AuthRepository>().currentUser != null;
+  }
+  return false;
+}
+
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/splash',
+  refreshListenable: AuthChangeNotifier.instance,
+  redirect: (BuildContext context, GoRouterState state) {
+    final isAuth = _isUserAuthenticated();
+    final loc = state.uri.path;
+    final isAuthPath = loc == '/login' ||
+        loc == '/signup' ||
+        loc == '/splash' ||
+        loc == '/onboarding';
+
+    // Unauthenticated user trying to access protected shell/app routes
+    if (!isAuth && !isAuthPath) {
+      return '/login';
+    }
+
+    // Authenticated user trying to access login/signup
+    if (isAuth && (loc == '/login' || loc == '/signup')) {
+      return '/';
+    }
+
+    return null;
+  },
   routes: [
     GoRoute(
       path: '/splash',
@@ -38,6 +76,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/login',
       builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      path: '/signup',
+      builder: (context, state) => const LoginPage(isSignUp: true),
     ),
     GoRoute(
       path: '/add-vital',

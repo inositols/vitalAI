@@ -9,7 +9,8 @@ import '../widgets/login_header.dart';
 import '../widgets/social_login_buttons.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final bool isSignUp;
+  const LoginPage({super.key, this.isSignUp = false});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -19,7 +20,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isSignUp = false;
+  late bool _isSignUp;
 
   late AnimationController _entryController;
   late Animation<double> _logoAnimation;
@@ -28,6 +29,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _isSignUp = widget.isSignUp;
 
     _entryController = AnimationController(
       vsync: this,

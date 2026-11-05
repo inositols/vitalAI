@@ -56,6 +56,9 @@ class PatientModel {
   /// Local timestamp when the record was last modified.
   late DateTime updatedAt;
 
+  /// Calculated chronological age in completed years.
+  int get age => (DateTime.now().difference(dateOfBirth).inDays / 365.25).floor();
+
   PatientModel() {
     remoteId = const Uuid().v4();
     name = '';
